@@ -345,11 +345,16 @@ public class RouteCheckTests
             // VitePress's default home layout renders the hero image as
             // .VPHero .VPImage when `hero.image.src` is set in index.md;
             // the fallback `.VPHero img[src*='logo']` covers theme-overridden
-            // cases where a custom hero component is in play.
+            // cases where a custom hero component is in play. Per maintainer
+            // commit c2041cef ("Updated Docs Site" 2026-06-26), the hero
+            // image points at `logo-large.png` — a bigger asset than the
+            // 32-px favicon `logo.png` — so the assertion accepts any
+            // `/logo*.png` variant to survive future asset swaps in the
+            // same shape.
             Assert.That(probes.HeroImageSrc, Is.Not.Null.And.Not.Empty,
                 "no image rendered inside .VPHero — hero.image did not take effect");
-            Assert.That(probes.HeroImageSrc, Does.EndWith("/logo.png"),
-                $"hero image src does not point at /logo.png — got '{probes.HeroImageSrc}'");
+            Assert.That(probes.HeroImageSrc, Does.Match(@"/logo[^/]*\.png$"),
+                $"hero image src does not match /logo*.png — got '{probes.HeroImageSrc}'");
 
             // Hero 'Download latest release' CTA — text + canonical link.
             Assert.That(probes.DownloadCtaHref, Is.EqualTo(
