@@ -156,7 +156,16 @@ namespace Ceen.Httpd
 #if NET9_0_OR_GREATER
                 await ReadExactlyAsync(buf, 0, buf.Length, cancellationToken);
 #else
-                await ReadAsync(buf, 0, buf.Length, cancellationToken);
+                // CA2022 short-read handling on non-net9 TFMs. ReadAsync
+                // may return fewer bytes than requested or 0 on EOF; if
+                // the underlying transport closes mid-body the caller
+                // would otherwise deadlock on the `m_bytesleft > 0` gate
+                // because a 0-byte read does not decrement m_bytesleft.
+                // Treat 0 as premature EOF and signal the caller that
+                // the drain could not complete.
+                var read = await ReadAsync(buf, 0, buf.Length, cancellationToken);
+                if (read == 0)
+                    return false;
 #endif
             }
 

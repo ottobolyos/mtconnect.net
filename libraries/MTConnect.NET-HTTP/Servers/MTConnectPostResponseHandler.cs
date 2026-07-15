@@ -108,11 +108,28 @@ namespace MTConnect.Servers
 
 #if NET9_0_OR_GREATER
                     await inputStream.ReadExactlyAsync(bytes, 0, bytes.Length);
-#else
-                    await inputStream.ReadAsync(bytes, 0, bytes.Length);
-#endif
-
                     return TrimEnd(bytes);
+#else
+                    // CA2022 short-read handling on non-net9 TFMs. The
+                    // ReadAsync return count is captured and accumulated
+                    // across short reads until EOF or the buffer is full.
+                    // Truncating to the actual filled length removes the
+                    // pre-fix TrimEnd-on-zero-byte heuristic that
+                    // over-truncated bodies whose final byte legitimately
+                    // was 0x00.
+                    var totalRead = 0;
+                    while (totalRead < bytes.Length)
+                    {
+                        var read = await inputStream.ReadAsync(bytes, totalRead, bytes.Length - totalRead);
+                        if (read == 0) break;
+                        totalRead += read;
+                    }
+                    if (totalRead == bytes.Length)
+                        return bytes;
+                    var result = new byte[totalRead];
+                    Array.Copy(bytes, 0, result, 0, totalRead);
+                    return result;
+#endif
                 }
                 catch { }
             }
