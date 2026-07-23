@@ -289,7 +289,7 @@ public class RouteCheckTests
                 ogImage: document.querySelector('meta[property=""og:image""]')?.getAttribute('content') ?? null,
                 twitterCard: document.querySelector('meta[name=""twitter:card""]')?.getAttribute('content') ?? null,
                 twitterImage: document.querySelector('meta[name=""twitter:image""]')?.getAttribute('content') ?? null,
-                heroLogoSrc: document.querySelector('.VPNavBarTitle img.logo')?.getAttribute('src') ?? null,
+                navTitleText: document.querySelector('.VPNavBarTitle')?.textContent?.trim() ?? null,
                 heroImageSrc: (document.querySelector('.VPHero .VPImage')
                     ?? document.querySelector('.VPHero img[src*=""logo""]'))?.getAttribute('src') ?? null,
                 downloadCtaHref: (() => {
@@ -331,25 +331,30 @@ public class RouteCheckTests
             Assert.That(probes.TwitterImage, Does.EndWith("/logo.png"),
                 $"twitter:image does not point at /logo.png — got '{probes.TwitterImage}'");
 
-            // themeConfig.logo — VitePress renders the logo as an <img>
-            // inside .VPNavBarTitle when themeConfig.logo is set. The
-            // text site title is hidden (themeConfig.siteTitle: false)
-            // because the logo PNG already carries the wordmark.
-            Assert.That(probes.HeroLogoSrc, Is.Not.Null.And.Not.Empty,
-                "no <img> rendered inside .VPNavBarTitle — themeConfig.logo did not take effect");
-            Assert.That(probes.HeroLogoSrc, Does.EndWith("/logo.png"),
-                $"nav logo src does not point at /logo.png — got '{probes.HeroLogoSrc}'");
+            // Nav title — text-only (per maintainer decision in commit
+            // c2041cef "Updated Docs Site" 2026-06-26: the logo was
+            // deemed too small to read in the nav bar, so the title
+            // reverted to the plain text "MTConnect.NET"). The nav-bar
+            // no longer contains an <img>; the wordmark rendering lives
+            // in the hero block below.
+            Assert.That(probes.NavTitleText, Is.EqualTo("MTConnect.NET"),
+                $"nav-bar title text does not match 'MTConnect.NET' — got '{probes.NavTitleText}'");
 
             // Hero image — pinned per §1.0d-trigies-semel (the maintainer-supplied
             // logo must render in the landing hero block, not just the nav bar).
             // VitePress's default home layout renders the hero image as
             // .VPHero .VPImage when `hero.image.src` is set in index.md;
             // the fallback `.VPHero img[src*='logo']` covers theme-overridden
-            // cases where a custom hero component is in play.
+            // cases where a custom hero component is in play. Per maintainer
+            // commit c2041cef ("Updated Docs Site" 2026-06-26), the hero
+            // image points at `logo-large.png` — a bigger asset than the
+            // 32-px favicon `logo.png` — so the assertion accepts any
+            // `/logo*.png` variant to survive future asset swaps in the
+            // same shape.
             Assert.That(probes.HeroImageSrc, Is.Not.Null.And.Not.Empty,
                 "no image rendered inside .VPHero — hero.image did not take effect");
-            Assert.That(probes.HeroImageSrc, Does.EndWith("/logo.png"),
-                $"hero image src does not point at /logo.png — got '{probes.HeroImageSrc}'");
+            Assert.That(probes.HeroImageSrc, Does.Match(@"/logo[^/]*\.png$"),
+                $"hero image src does not match /logo*.png — got '{probes.HeroImageSrc}'");
 
             // Hero 'Download latest release' CTA — text + canonical link.
             Assert.That(probes.DownloadCtaHref, Is.EqualTo(
@@ -404,8 +409,8 @@ public class RouteCheckTests
         [JsonPropertyName("twitterImage")]
         public string? TwitterImage { get; set; }
 
-        [JsonPropertyName("heroLogoSrc")]
-        public string? HeroLogoSrc { get; set; }
+        [JsonPropertyName("navTitleText")]
+        public string? NavTitleText { get; set; }
 
         [JsonPropertyName("heroImageSrc")]
         public string? HeroImageSrc { get; set; }
