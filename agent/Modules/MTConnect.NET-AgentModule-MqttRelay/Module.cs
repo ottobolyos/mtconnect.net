@@ -42,6 +42,7 @@ namespace MTConnect
         private const string ModuleId = "MQTT Relay";
 
         private readonly MqttRelayModuleConfiguration _configuration;
+        private readonly System.Security.Authentication.SslProtocols _sslProtocols;
         private readonly MTConnectMqttDocumentServer _documentServer;
         private readonly MTConnectMqttEntityServer _entityServer;
         private readonly MqttFactory _mqttFactory;
@@ -81,6 +82,14 @@ namespace MTConnect
             Id = ModuleId;
 
             _configuration = AgentApplicationConfiguration.GetConfiguration<MqttRelayModuleConfiguration>(configuration);
+
+            // Resolve the user-configured SslProtocols list up front
+            // so a misconfiguration surfaces at module load rather
+            // than as a mid-worker connect failure. The resolver
+            // throws MqttRelayConfigurationException on an empty
+            // list, an unknown name, or a runtime-unsupported
+            // enum value.
+            _sslProtocols = MqttRelayTlsProtocolResolver.Resolve(_configuration.SslProtocols);
 
             switch (_configuration.TopicStructure)
             {
@@ -274,7 +283,7 @@ namespace MTConnect
                         // built.
                         var tlsOptions = MqttRelayTlsOptionsBuilder.Build(
                             _configuration,
-                            System.Security.Authentication.SslProtocols.Tls12);
+                            _sslProtocols);
                         if (tlsOptions != null)
                         {
                             clientOptionsBuilder.WithTlsOptions(tlsOptions);
