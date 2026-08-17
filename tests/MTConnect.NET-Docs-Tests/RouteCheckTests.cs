@@ -140,27 +140,40 @@ public class RouteCheckTests
             // failed the landing-page og:image assertion on Aug 17 for
             // exactly this reason, because the config-side fix that
             // added the https:// og:image URL had landed since the last
-            // build). The rebuild cost is bounded by npm's incremental
-            // Vite bundling — a warm-cache no-source-change rebuild is
-            // seconds, not minutes — and this fixture is already gated
-            // by [Category("E2E")] so it never blocks the fast tier.
+            // build).
             //
             // Consumer mode (sharded CI matrix, ROUTE_SHARD_TOTAL > 1):
             // CI's sharded route-check jobs download the dist/ tree
-            // from the `docs-prepare` workflow artefact and do NOT
-            // install docfx, so re-running `npm run build` would invoke
-            // the `prebuild` hook (`scripts/generate-api-ref.sh` →
-            // `docfx metadata`) and fail with "docfx not found on
-            // PATH". Under shard mode the fixture consumes whatever
-            // dist/ the artefact download produced; the docs-prepare
-            // job is the single docfx-owning producer.
+            // from the `docs-prepare` workflow artefact and skip the
+            // rebuild. The docs-prepare job is the single docfx-owning
+            // producer.
+            //
+            // Why call vitepress directly instead of `npm run build`:
+            // the `prebuild` hook wired into `package.json` runs
+            // `docs/scripts/generate-api-ref.sh`, which does a
+            // `dotnet build -c Debug --no-incremental` sweep of every
+            // library, agent, adapter and module project. Under a full
+            // `dotnet test MTConnect.NET.sln -c Release` invocation the
+            // solution build is still in flight (multi-TFM Release
+            // outputs for net47, net461, net472, net9.0, net10.0, …
+            // build in parallel with the net8.0 test hosts), so
+            // clobbering each project's `obj/project.assets.json` back
+            // to a Debug-only net8.0 view races the Release build and
+            // trips NETSDK1005 on every non-net8.0 target that MSBuild
+            // has not yet linked. Invoking vitepress directly walks the
+            // same source markdown, produces the same dist/, keeps the
+            // producer-mode rebuild guarantee, and leaves the obj/
+            // tree untouched. The api reference sub-tree under
+            // docs/api/ stays as whatever the last regen produced —
+            // this fixture does not own that regen (the docs-prepare
+            // workflow and `docs/scripts/generate-api-ref.sh` do).
             var distIndex = Path.Combine(distDir, "index.html");
             var (_, shardTotal) = RouteCheckHelpers.ReadShardEnv();
             var isConsumerShard = shardTotal > 1;
             if (!isConsumerShard || !File.Exists(distIndex))
             {
-                stage = "npm run build";
-                RunNpm("run build", _docsRoot);
+                stage = "vitepress build";
+                RunVitepressBuild(_docsRoot);
             }
 
             // Install the chromium binary the Playwright .NET binding drives.
@@ -808,6 +821,76 @@ public class RouteCheckTests
     }
 
     // ─── npm bootstrap ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Invoke the local vitepress binary directly against the docs root,
+    /// bypassing the <c>package.json</c> <c>prebuild</c> hook that
+    /// <c>npm run build</c> would trigger. The prebuild step runs
+    /// <c>docs/scripts/generate-api-ref.sh</c>, which does a
+    /// <c>dotnet build -c Debug --no-incremental</c> sweep across the
+    /// entire library, agent, adapter and module surface; that sweep
+    /// rewrites every touched project's <c>obj/project.assets.json</c>
+    /// to a Debug-only <c>net8.0</c> view and races any in-flight
+    /// multi-TFM Release build (NETSDK1005 on <c>net47</c>,
+    /// <c>net9.0</c>, <c>net10.0</c>, …). This helper resolves
+    /// <c>node_modules/vitepress/bin/vitepress.js</c> relative to the
+    /// docs root, drains stdout+stderr concurrently to avoid the
+    /// classic pipe-deadlock pattern, and rethrows with the captured
+    /// output when the child exits non-zero.
+    /// </summary>
+    /// <param name="docsRoot">
+    /// Absolute path to the docs site (<c>docs/</c> under the repo
+    /// root); becomes the child process's working directory and the
+    /// anchor for the <c>node_modules</c> lookup.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the vitepress binary cannot be located,
+    /// <see cref="Process.Start(ProcessStartInfo)"/> returns
+    /// <see langword="null"/>, or the child process exits with a
+    /// non-zero code (the captured stdout and stderr are appended to
+    /// the exception message for diagnosis).
+    /// </exception>
+    private static void RunVitepressBuild(string docsRoot)
+    {
+        var vitepressEntry = Path.Combine(docsRoot, "node_modules", "vitepress", "bin", "vitepress.js");
+        if (!File.Exists(vitepressEntry))
+        {
+            throw new InvalidOperationException(
+                $"Cannot invoke vitepress build directly — expected entry point at '{vitepressEntry}' does not exist. Run `npm ci` under {docsRoot} first (the OneTimeSetUp does this when node_modules is missing).");
+        }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "node",
+            WorkingDirectory = docsRoot,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        // Mirror package.json's `build` script memory budget — vitepress
+        // build's Vue SSR pass can exceed V8's default 2 GB old-space
+        // when the source tree is thousands of pages.
+        psi.ArgumentList.Add("--max-old-space-size=8192");
+        psi.ArgumentList.Add(vitepressEntry);
+        psi.ArgumentList.Add("build");
+
+        var proc = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start `node … vitepress build` process");
+
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        Task.WaitAll(stdoutTask, stderrTask);
+        var stdout = stdoutTask.Result;
+        var stderr = stderrTask.Result;
+        proc.WaitForExit();
+
+        if (proc.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"`node … vitepress.js build` exited {proc.ExitCode}{Environment.NewLine}stdout:{Environment.NewLine}{stdout}{Environment.NewLine}stderr:{Environment.NewLine}{stderr}");
+        }
+    }
 
     private static void RunNpm(string arguments, string workingDirectory)
     {
