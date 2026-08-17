@@ -23,6 +23,8 @@ namespace MTConnect
         {
             if (ns != null)
             {
+                if (Namespaces.Version27.Match(ns)) return MTConnectVersions.Version27;
+                if (Namespaces.Version26.Match(ns)) return MTConnectVersions.Version26;
                 if (Namespaces.Version25.Match(ns)) return MTConnectVersions.Version25;
                 if (Namespaces.Version24.Match(ns)) return MTConnectVersions.Version24;
                 if (Namespaces.Version23.Match(ns)) return MTConnectVersions.Version23;
@@ -40,7 +42,8 @@ namespace MTConnect
                 if (Namespaces.Version10.Match(ns)) return MTConnectVersions.Version10;
             }
 
-            return new Version();
+            // unknown namespace → default to latest supported version
+            return MTConnectVersions.Max;
         }
     }
 }
