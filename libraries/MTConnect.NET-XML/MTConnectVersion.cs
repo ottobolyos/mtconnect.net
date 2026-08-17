@@ -17,12 +17,18 @@ namespace MTConnect
         }
 
         /// <summary>
-        /// Gets the Version of the MTConnect standard being used based on the XML Namespace that is used
+        /// Gets the Version of the MTConnect standard being used based on the XML Namespace that is used.
+        /// A namespace that is missing, or that does not match any enumerated version below — including
+        /// a future spec version the library has not yet been rebuilt against — falls through to
+        /// <see cref="MTConnectVersions.Max"/> rather than an older reader path, so the document is still
+        /// read against the newest known reader instead of the version being silently discarded.
         /// </summary>
         public static Version GetByNamespace(string ns)
         {
             if (ns != null)
             {
+                if (Namespaces.Version27.Match(ns)) return MTConnectVersions.Version27;
+                if (Namespaces.Version26.Match(ns)) return MTConnectVersions.Version26;
                 if (Namespaces.Version25.Match(ns)) return MTConnectVersions.Version25;
                 if (Namespaces.Version24.Match(ns)) return MTConnectVersions.Version24;
                 if (Namespaces.Version23.Match(ns)) return MTConnectVersions.Version23;
@@ -40,7 +46,7 @@ namespace MTConnect
                 if (Namespaces.Version10.Match(ns)) return MTConnectVersions.Version10;
             }
 
-            return new Version();
+            return MTConnectVersions.Max;
         }
     }
 }

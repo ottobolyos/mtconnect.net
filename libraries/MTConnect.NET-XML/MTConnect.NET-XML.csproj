@@ -73,6 +73,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="MTConnect.NET-XML-Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="README-Nuget.md">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
