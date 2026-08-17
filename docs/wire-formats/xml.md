@@ -79,11 +79,13 @@ The codec walks the `xmlns` attribute on the root element to pick the version. T
 | v2.2 | `urn:mtconnect.org:MTConnectStreams:2.2` | Read + write. |
 | v2.3 | `urn:mtconnect.org:MTConnectStreams:2.3` | Read + write. |
 | v2.4 | `urn:mtconnect.org:MTConnectStreams:2.4` | Read + write. |
-| v2.5 | `urn:mtconnect.org:MTConnectStreams:2.5` | Read + write. The library's current `MTConnectVersions.Max`. |
+| v2.5 | `urn:mtconnect.org:MTConnectStreams:2.5` | Read + write. |
+| v2.6 | `urn:mtconnect.org:MTConnectStreams:2.6` | Read + write. |
+| v2.7 | `urn:mtconnect.org:MTConnectStreams:2.7` | Read + write. The library's current `MTConnectVersions.Max`. |
 
 The per-envelope coverage rolls up to the same table — Streams, Devices, Assets, and Error all ship XSDs across the same version span. There is no v1.9 row because the MTConnect Standard skipped that number between v1.8 and v2.0; the XSD set has no `1.9` namespace and the library tracks the canonical gap. See the [`MTConnectVersions`](/api/MTConnect.MTConnectVersions) constants for the full enum.
 
-For v2.6 and v2.7 namespaces, the codec falls through to the v2.5 reader path; the library's compliance posture for those versions is tracked under [Compliance](/compliance/). Authoritative XSDs for every version are at [schemas.mtconnect.org](https://schemas.mtconnect.org/) and the normative SysML XMI is at [`mtconnect/mtconnect_sysml_model`](https://github.com/mtconnect/mtconnect_sysml_model). Prose narration lives at [docs.mtconnect.org](https://docs.mtconnect.org/) in Part 2.0 (Streams), Part 3.0 (Devices), and Part 4.0 (Assets).
+For any namespace not enumerated above — including future spec versions the library has not yet been rebuilt against — the codec defaults to the latest supported version (`MTConnectVersions.Max`) rather than to an older reader path. This preserves forward compatibility: an incoming document declaring a namespace one minor version ahead of the library's compiled surface is still read against the newest known reader. The library's compliance posture for each version is tracked under [Compliance](/compliance/). Authoritative XSDs for every version are at [schemas.mtconnect.org](https://schemas.mtconnect.org/) and the normative SysML XMI is at [`mtconnect/mtconnect_sysml_model`](https://github.com/mtconnect/mtconnect_sysml_model). Prose narration lives at [docs.mtconnect.org](https://docs.mtconnect.org/) in Part 2.0 (Streams), Part 3.0 (Devices), and Part 4.0 (Assets).
 
 ## Wire-flow sequence
 
