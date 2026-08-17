@@ -125,20 +125,39 @@ public class RouteCheckTests
                 RunNpm("ci", _docsRoot);
             }
 
-            // Rebuild dist only when it is missing so the test asserts against
-            // a tree generated from the current source. CI's sharded
-            // route-check jobs download the dist/ tree from the `docs-prepare`
-            // workflow artefact and do NOT install docfx, so re-running
-            // `npm run build` here would invoke the `prebuild` hook
-            // (`scripts/generate-api-ref.sh` → `docfx metadata`) and fail
-            // with "docfx not found on PATH". Honouring the pre-existing
-            // dist/index.html sentinel matches the workflow's documented
-            // contract: docs-prepare is the single docfx-owning producer
-            // and each shard consumes its artefact. Locally, deleting
-            // docs/.vitepress/dist/ (or running on a clean clone) still
-            // triggers a full build.
+            // Producer vs. consumer mode.
+            //
+            // Producer mode (non-shard local + non-shard CI leg): the
+            // fixture is the sole authority on dist/, so it always
+            // rebuilds — a warm-cache local run must still walk a tree
+            // generated from the CURRENT source markdown, current
+            // config.ts, current sidebar, and so on. Honouring a
+            // pre-existing dist/index.html sentinel was the earlier
+            // policy and it silently walked a stale tree whenever a
+            // developer re-ran `dotnet test` after editing source: the
+            // walked routes, meta tags, and rendered HTML lagged the
+            // source by an arbitrary distance (a stale dist from Jun 2
+            // failed the landing-page og:image assertion on Aug 17 for
+            // exactly this reason, because the config-side fix that
+            // added the https:// og:image URL had landed since the last
+            // build). The rebuild cost is bounded by npm's incremental
+            // Vite bundling — a warm-cache no-source-change rebuild is
+            // seconds, not minutes — and this fixture is already gated
+            // by [Category("E2E")] so it never blocks the fast tier.
+            //
+            // Consumer mode (sharded CI matrix, ROUTE_SHARD_TOTAL > 1):
+            // CI's sharded route-check jobs download the dist/ tree
+            // from the `docs-prepare` workflow artefact and do NOT
+            // install docfx, so re-running `npm run build` would invoke
+            // the `prebuild` hook (`scripts/generate-api-ref.sh` →
+            // `docfx metadata`) and fail with "docfx not found on
+            // PATH". Under shard mode the fixture consumes whatever
+            // dist/ the artefact download produced; the docs-prepare
+            // job is the single docfx-owning producer.
             var distIndex = Path.Combine(distDir, "index.html");
-            if (!File.Exists(distIndex))
+            var (_, shardTotal) = RouteCheckHelpers.ReadShardEnv();
+            var isConsumerShard = shardTotal > 1;
+            if (!isConsumerShard || !File.Exists(distIndex))
             {
                 stage = "npm run build";
                 RunNpm("run build", _docsRoot);
