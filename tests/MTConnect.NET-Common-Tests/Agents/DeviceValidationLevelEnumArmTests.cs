@@ -133,20 +133,17 @@ namespace MTConnect.NET_Common_Tests.Agents
                         "Warning must retain the generic Composition.");
                     break;
                 case DeviceValidationLevel.Remove:
-                    // KNOWN GAP — filed as F-TEST-BUG-1 (see the fixture's XML doc summary).
-                    // `Device.RemoveComposition(string)` (Device.cs:664) only removes from the
-                    // Device's top-level Compositions collection; it does NOT recurse into child
-                    // Components' Compositions. `NormalizeDevice` (MTConnectAgent.cs:1340) locates
-                    // the generic Composition via the recursive `GetCompositions()`, but calls
-                    // the non-recursive `RemoveComposition`. So a nested generic Composition is
-                    // reported via InvalidCompositionAdded but never removed. This assertion pins
-                    // the observed (buggy) behaviour so the fixture goes GREEN today; the finding
-                    // tracks the fix.
+                    // F-TEST-BUG-1 fix (Device.cs:664): `Device.RemoveComposition(string)` now
+                    // recurses into child Components' Compositions, mirroring the shape of the
+                    // recursive `Device.RemoveComponent`. `NormalizeDevice` (MTConnectAgent.cs:1340)
+                    // still locates the generic Composition via the recursive `GetCompositions()`;
+                    // the Remove call now actually removes it.
                     Assert.That(raised, Is.EqualTo(1),
-                        "Remove must at least raise InvalidCompositionAdded even when the recursive-remove bug leaves the Composition in place.");
-                    Assert.That(added, Is.Not.Null);
-                    Assert.That(FirstChildComponentCompositionIds(added!).Any(id => id == GenericCompositionId), Is.True,
-                        "OBSERVED (buggy) behaviour: nested Composition is retained under Remove because Device.RemoveComposition does not recurse into child Components. When the bug is fixed, invert this assertion and remove the finding.");
+                        "Remove must raise InvalidCompositionAdded exactly once.");
+                    Assert.That(added, Is.Not.Null,
+                        "Remove must retain the device — only the generic Composition is dropped.");
+                    Assert.That(FirstChildComponentCompositionIds(added!).Any(id => id == GenericCompositionId), Is.False,
+                        "Remove must drop the nested generic Composition from the child Component's Compositions collection (F-TEST-BUG-1 fix — Device.RemoveComposition now recurses).");
                     break;
                 case DeviceValidationLevel.Strict:
                     Assert.That(raised, Is.EqualTo(1));
@@ -183,19 +180,16 @@ namespace MTConnect.NET_Common_Tests.Agents
                         "Warning must retain the generic DataItem.");
                     break;
                 case DeviceValidationLevel.Remove:
-                    // KNOWN GAP — filed as F-TEST-BUG-2 (see the fixture's XML doc summary).
-                    // `Device.RemoveDataItem(string)` (Device.cs:1017) OVERRIDES the base
-                    // `Component.RemoveDataItem` and only removes from child Components' DataItems
-                    // — it does NOT touch the Device's own top-level DataItems collection. So a
-                    // generic DataItem added directly to a Device is reported via
-                    // InvalidDataItemAdded but never actually removed. This assertion pins the
-                    // observed (buggy) behaviour so the fixture goes GREEN today; the finding
-                    // tracks the fix.
+                    // F-TEST-BUG-2 fix (Device.cs:1017): `Device.RemoveDataItem(string)` now
+                    // removes from `Device.DataItems` (the top-level collection) before
+                    // descending into child Components — restoring the base
+                    // `Component.RemoveDataItem` semantic the override previously lost.
                     Assert.That(raised, Is.EqualTo(1),
-                        "Remove must at least raise InvalidDataItemAdded even when Device.RemoveDataItem is a no-op for top-level DataItems.");
-                    Assert.That(added, Is.Not.Null);
-                    Assert.That(added!.DataItems!.Any(d => d.Id == GenericDataItemId), Is.True,
-                        "OBSERVED (buggy) behaviour: top-level DataItem is retained under Remove because Device.RemoveDataItem overrides base Component.RemoveDataItem without touching top-level. When the bug is fixed, invert this assertion and remove the finding.");
+                        "Remove must raise InvalidDataItemAdded exactly once.");
+                    Assert.That(added, Is.Not.Null,
+                        "Remove must retain the device — only the generic DataItem is dropped.");
+                    Assert.That(added!.DataItems!.Any(d => d.Id == GenericDataItemId), Is.False,
+                        "Remove must drop the top-level generic DataItem from the Device (F-TEST-BUG-2 fix — Device.RemoveDataItem now covers the top-level collection).");
                     break;
                 case DeviceValidationLevel.Strict:
                     Assert.That(raised, Is.EqualTo(1));
