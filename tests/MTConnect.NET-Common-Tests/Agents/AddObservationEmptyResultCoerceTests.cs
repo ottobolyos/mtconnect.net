@@ -267,6 +267,117 @@ namespace MTConnect.Tests.Common.Agents
 
 
         // -------------------------------------------------------------------- //
+        // Numeric-typed EVENT allow-list exhaustiveness (SysML integer/float)  //
+        // -------------------------------------------------------------------- //
+
+        /// <summary>
+        /// The SysML numeric-typed Event allow-list mirrored in <see cref="DataItem.GetValueClass"/>.
+        /// Every entry MUST classify as <see cref="DataItemValueClass.Numeric"/>; adding a new numeric
+        /// Event type without extending this list, or dropping an entry, is caught here.
+        /// </summary>
+        private static readonly string[] _numericEventTypeAllowList =
+        {
+            "ACTIVATION_COUNT",
+            "AXIS_FEEDRATE_OVERRIDE",
+            "BLOCK_COUNT",
+            "CYCLE_COUNT",
+            "DEACTIVATION_COUNT",
+            "HARDNESS",
+            "LINE_NUMBER",
+            "LOAD_COUNT",
+            "MATERIAL_LAYER",
+            "MEASUREMENT_VALUE",
+            "NETWORK_PORT",
+            "PART_COUNT",
+            "PART_INDEX",
+            "PATH_FEEDRATE_OVERRIDE",
+            "PROGRAM_NEST_LEVEL",
+            "ROTARY_VELOCITY_OVERRIDE",
+            "THICKNESS",
+            "TOOL_OFFSET",
+            "TRANSFER_COUNT",
+            "UNCERTAINTY",
+            "UNLOAD_COUNT",
+        };
+
+        /// <summary>
+        /// Every entry in the SysML numeric-typed Event allow-list classifies as
+        /// <see cref="DataItemValueClass.Numeric"/> so its empty Result is coerced,
+        /// not preserved verbatim.
+        /// </summary>
+        [Test]
+        [TestCaseSource(nameof(_numericEventTypeAllowList))]
+        public void GetValueClass_Numeric_Event_AllowList_Entry_Is_Numeric(string typeId)
+        {
+            var dataItem = new DataItem
+            {
+                Id = $"{DeviceId}_{typeId}",
+                Category = DataItemCategory.EVENT,
+                Type = typeId,
+                Representation = DataItemRepresentation.VALUE,
+            };
+
+            Assert.That(DataItem.GetValueClass(dataItem), Is.EqualTo(DataItemValueClass.Numeric),
+                $"SysML numeric-typed Event '{typeId}' MUST classify as Numeric so its empty Result is coerced");
+        }
+
+        /// <summary>
+        /// Every entry in the SysML numeric-typed Event allow-list has its empty Result coerced to
+        /// <c>UNAVAILABLE</c> through <c>AddObservation</c>, exercising the coerce path end-to-end
+        /// for each type.
+        /// </summary>
+        [Test]
+        [TestCaseSource(nameof(_numericEventTypeAllowList))]
+        public void NumericEvent_AllowList_Entry_EmptyResult_Coerced_To_Unavailable(string typeId)
+        {
+            var dataItemKey = $"{typeId}_key";
+            var dataItem = new DataItem
+            {
+                Id = $"{DeviceId}_{typeId}",
+                Name = dataItemKey,
+                Category = DataItemCategory.EVENT,
+                Type = typeId,
+                Representation = DataItemRepresentation.VALUE,
+            };
+
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var added = agent.AddObservation(DeviceKey, dataItemKey, (object)string.Empty, DateTime.UtcNow);
+
+            Assert.That(added, Is.True, $"{typeId} empty-Result observation must reach the buffer post-coerce");
+            Assert.That(CurrentResult(agent, dataItemKey), Is.EqualTo(Observation.Unavailable),
+                $"{typeId} is numeric per the SysML model; empty MUST become UNAVAILABLE");
+        }
+
+
+        // -------------------------------------------------------------------- //
+        // DataItemValueClass switch arm guard                                  //
+        // -------------------------------------------------------------------- //
+
+        /// <summary>
+        /// Guard: every <see cref="DataItemValueClass"/> enum value has been observed in the
+        /// classifier's output for a representative DataItem. Adding a new arm without a matching
+        /// coerce-path branch is caught here as a compile-time-adjacent tripwire.
+        /// </summary>
+        [Test]
+        public void DataItemValueClass_All_Enum_Arms_Are_Reachable_From_GetValueClass()
+        {
+            var observedArms = new System.Collections.Generic.HashSet<DataItemValueClass>
+            {
+                DataItem.GetValueClass(new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)),
+                DataItem.GetValueClass(new AvailabilityDataItem(DeviceId)),
+                DataItem.GetValueClass(new ProgramDataItem(DeviceId, ProgramDataItem.SubTypes.ACTIVE)),
+            };
+
+            foreach (DataItemValueClass arm in Enum.GetValues(typeof(DataItemValueClass)))
+            {
+                Assert.That(observedArms, Does.Contain(arm),
+                    $"Enum arm {arm} has no representative DataItem covered by GetValueClass; add one or extend the classifier");
+            }
+        }
+
+
+        // -------------------------------------------------------------------- //
         // Classifier direct tests                                              //
         // -------------------------------------------------------------------- //
 
