@@ -1242,17 +1242,19 @@ namespace MTConnect.Devices
         /// <remarks>
         /// The classification follows the MTConnect Standard, Part 2 - Devices Information Model:
         /// <list type="bullet">
-        ///   <item><description>SAMPLE observations are Numeric: the Value Properties of Sample
-        ///     section states "Sample MUST always be reported in float".</description></item>
+        ///   <item><description>SAMPLE observations with a VALUE representation are Numeric: the
+        ///     Value Properties of Sample section states "Sample MUST always be reported in
+        ///     float".</description></item>
         ///   <item><description>EVENT observations with a VALUE representation are classified from
         ///     the DataItem's Type: an enumeration is inferred when a matching enum type exists in
         ///     <c>MTConnect.Observations.Events</c>; the numeric-typed Event list mirrors the
         ///     Standard SysML model; every other Type falls back to String, matching the default
         ///     value type for <c>Observation::result</c>.</description></item>
-        ///   <item><description>EVENT observations with a DATA_SET, TABLE, or TIME_SERIES
-        ///     representation carry structured payloads rather than a single Result and are
-        ///     reported as String from this API (their coercion is not this classifier's
-        ///     concern).</description></item>
+        ///   <item><description>SAMPLE or EVENT observations with a DATA_SET, TABLE, or
+        ///     TIME_SERIES representation carry structured payloads (Entries, Cells, Samples)
+        ///     rather than a single Result and are reported as String from this API (their
+        ///     coercion is not this classifier's concern - their inputs legitimately omit the
+        ///     Result key by design).</description></item>
         ///   <item><description>CONDITION observations report a condition state rather than a
         ///     Result value and are reported as String from this API (their coercion is governed
         ///     by <see cref="MTConnect.Observations.ConditionLevel"/>).</description></item>
@@ -1264,11 +1266,16 @@ namespace MTConnect.Devices
         {
             if (dataItem == null) return DataItemValueClass.String;
 
+            if (dataItem.Category == DataItemCategory.CONDITION) return DataItemValueClass.String;
+
+            // DATA_SET / TABLE / TIME_SERIES observations carry structured payloads rather than a
+            // single Result and are outside the empty-Result classifier's remit for both SAMPLE
+            // and EVENT categories.
+            if (dataItem.Representation != DataItemRepresentation.VALUE) return DataItemValueClass.String;
+
             if (dataItem.Category == DataItemCategory.SAMPLE) return DataItemValueClass.Numeric;
 
             if (dataItem.Category != DataItemCategory.EVENT) return DataItemValueClass.String;
-
-            if (dataItem.Representation != DataItemRepresentation.VALUE) return DataItemValueClass.String;
 
             return ClassifyEventValueByType(dataItem.Type);
         }
