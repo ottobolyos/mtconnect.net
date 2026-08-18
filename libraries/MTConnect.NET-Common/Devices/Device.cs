@@ -658,11 +658,15 @@ namespace MTConnect.Devices
 
 
         /// <summary>
-        /// Remove a Composition from the Composition
+        /// Remove a Composition from the Device tree — top-level and every nested
+        /// child Component. Mirrors the recursive shape of <see cref="RemoveComponent(string)"/>
+        /// so that a Composition located via the recursive <see cref="GetCompositions"/>
+        /// pathway is actually removed regardless of depth.
         /// </summary>
         /// <param name="compositionId">The ID of the Composition to remove</param>
         public void RemoveComposition(string compositionId)
         {
+            // Top-level Compositions collection on the Device itself.
             if (!Compositions.IsNullOrEmpty())
             {
                 var compositions = new List<IComposition>();
@@ -671,17 +675,40 @@ namespace MTConnect.Devices
 
                 Compositions = compositions;
             }
+
+            // Nested Compositions on every child Component (recursive).
+            if (!Components.IsNullOrEmpty())
+            {
+                foreach (var component in Components)
+                {
+                    RemoveComposition(component, compositionId);
+                }
+            }
         }
 
         private void RemoveComposition(IComponent component, string compositionId)
         {
-            if (component != null && !component.Compositions.IsNullOrEmpty())
+            if (component == null) return;
+
+            if (!component.Compositions.IsNullOrEmpty())
             {
                 var compositions = new List<IComposition>();
                 compositions.AddRange(component.Compositions);
                 compositions.RemoveAll(o => o.Id == compositionId);
 
-                ((Component)component).AddCompositions(compositions);
+                // Replace outright rather than AddCompositions (which would append
+                // duplicates); the local list already contains the survivors.
+                ((Component)component).Compositions = compositions;
+            }
+
+            // Recurse into grandchildren so a Composition nested arbitrarily deep
+            // is reachable — matches the shape of RemoveComponent recursion.
+            if (!component.Components.IsNullOrEmpty())
+            {
+                foreach (var subComponent in component.Components)
+                {
+                    RemoveComposition(subComponent, compositionId);
+                }
             }
         }
 
@@ -1011,11 +1038,27 @@ namespace MTConnect.Devices
 
 
         /// <summary>
-        /// Remove a DataItem from the Device
+        /// Remove a DataItem from the Device tree — the top-level
+        /// <see cref="Component.DataItems"/> collection on the Device itself and every
+        /// nested child Component. The override previously skipped the Device's own
+        /// DataItems collection (walking only child Components), so a DataItem added
+        /// directly to a Device was unremovable — invisible to
+        /// <see cref="MTConnectAgent.NormalizeDevice"/>'s Remove branch.
         /// </summary>
         /// <param name="dataItemId">The ID of the DataItem to remove</param>
         public void RemoveDataItem(string dataItemId)
         {
+            // Top-level DataItems on the Device itself. The pre-fix override
+            // skipped this collection entirely.
+            if (!DataItems.IsNullOrEmpty())
+            {
+                var dataItems = new List<IDataItem>();
+                dataItems.AddRange(DataItems);
+                dataItems.RemoveAll(o => o.Id == dataItemId);
+                DataItems = dataItems;
+            }
+
+            // Child Components' DataItems.
             var components = GetComponents();
             if (!components.IsNullOrEmpty())
             {
