@@ -542,6 +542,294 @@ namespace MTConnect.Tests.Common.Agents
                 "SAMPLE + TABLE carries a Cells payload rather than a single Result - the classifier must not report Numeric");
         }
 
+        /// <summary>Direct classifier assertion: EVENT DataItems with non-VALUE representations are classified as String, symmetric with the SAMPLE side.</summary>
+        [Test]
+        public void GetValueClass_Event_NonValueRepresentation_Is_String()
+        {
+            // A representative Enumeration Event (AVAILABILITY) classifies as Enumeration on the
+            // VALUE path; the same DataItem instance with a non-VALUE representation must
+            // short-circuit to String at the top of GetValueClass, mirroring the SAMPLE side.
+            var eventDataSet = new AvailabilityDataItem(DeviceId)
+            {
+                Representation = DataItemRepresentation.DATA_SET,
+            };
+            Assert.That(DataItem.GetValueClass(eventDataSet), Is.EqualTo(DataItemValueClass.String),
+                "EVENT + DATA_SET carries structured Entries rather than a single Result - the classifier must not report Enumeration");
+
+            var eventTable = new AvailabilityDataItem(DeviceId)
+            {
+                Representation = DataItemRepresentation.TABLE,
+            };
+            Assert.That(DataItem.GetValueClass(eventTable), Is.EqualTo(DataItemValueClass.String),
+                "EVENT + TABLE carries structured Cells rather than a single Result - the classifier must not report Enumeration");
+
+            var eventTimeSeries = new AvailabilityDataItem(DeviceId)
+            {
+                Representation = DataItemRepresentation.TIME_SERIES,
+            };
+            Assert.That(DataItem.GetValueClass(eventTimeSeries), Is.EqualTo(DataItemValueClass.String),
+                "EVENT + TIME_SERIES (though not spec-permitted for EVENTs) must still short-circuit to String rather than fall through the Enumeration path");
+
+            // Also cover a numeric-typed Event allow-list entry with a non-VALUE representation:
+            // the non-VALUE short-circuit must override the numeric-Event allow-list too.
+            var numericEventDataSet = new DataItem
+            {
+                Id = $"{DeviceId}_PART_COUNT_DS",
+                Category = DataItemCategory.EVENT,
+                Type = "PART_COUNT",
+                Representation = DataItemRepresentation.DATA_SET,
+            };
+            Assert.That(DataItem.GetValueClass(numericEventDataSet), Is.EqualTo(DataItemValueClass.String),
+                "EVENT + DATA_SET on a numeric-typed Event Type must still be String - representation trumps the SysML numeric allow-list");
+        }
+
+        /// <summary>Direct classifier assertion: CONDITION DataItems classify as String; the top-of-function short-circuit added alongside the non-VALUE gate applies regardless of Type or Representation.</summary>
+        [Test]
+        public void GetValueClass_Condition_Is_String()
+        {
+            // A CONDITION DataItem carries a condition state (Normal / Warning / Fault / Unavailable)
+            // rather than a Result value; the coerce path is gated by ConditionLevel and MUST NOT
+            // be driven by the empty-Result classifier.
+            var conditionValue = new DataItem
+            {
+                Id = $"{DeviceId}_SYSTEM",
+                Category = DataItemCategory.CONDITION,
+                Type = "SYSTEM",
+                Representation = DataItemRepresentation.VALUE,
+            };
+            Assert.That(DataItem.GetValueClass(conditionValue), Is.EqualTo(DataItemValueClass.String),
+                "CONDITION observations report a condition state; the classifier must short-circuit to String even when Representation == VALUE");
+
+            // Belt-and-braces: a CONDITION with a non-VALUE representation still classifies as String.
+            var conditionDataSet = new DataItem
+            {
+                Id = $"{DeviceId}_SYSTEM_DS",
+                Category = DataItemCategory.CONDITION,
+                Type = "SYSTEM",
+                Representation = DataItemRepresentation.DATA_SET,
+            };
+            Assert.That(DataItem.GetValueClass(conditionDataSet), Is.EqualTo(DataItemValueClass.String),
+                "CONDITION + DATA_SET classifies as String; the CONDITION short-circuit fires ahead of the representation gate");
+        }
+
+        /// <summary>Null-guard: <see cref="DataItem.GetValueClass"/> returns String for a null DataItem argument rather than throwing.</summary>
+        [Test]
+        public void GetValueClass_Null_DataItem_Is_String()
+        {
+            Assert.That(DataItem.GetValueClass(null), Is.EqualTo(DataItemValueClass.String),
+                "GetValueClass(null) must return String rather than throw - defensively fails safe for callers with an unresolved DataItem");
+        }
+
+
+        // -------------------------------------------------------------------- //
+        // Symmetric EVENT + non-VALUE representation tests                     //
+        // Spec: MTConnect Part 2, Value Properties of Event - DATA_SET and     //
+        // TABLE representations carry structured payloads (Entries / Cells)    //
+        // rather than a single Result. The classifier's non-VALUE short-       //
+        // circuit fires for EVENT the same way it fires for SAMPLE; these      //
+        // tests exercise the branch end-to-end via AddObservation so any       //
+        // regression that re-narrows the short-circuit to SAMPLE-only is       //
+        // caught here.                                                         //
+        // -------------------------------------------------------------------- //
+
+        /// <summary>An EVENT + DATA_SET observation with real Entries MUST NOT be coerced to UNAVAILABLE despite the absence of a Result key.</summary>
+        [Test]
+        public void EnumEvent_DataSet_Payload_Preserved_Not_Coerced()
+        {
+            // Use AVAILABILITY (a controlled-vocabulary Enum Event) with DATA_SET representation.
+            // On the VALUE path it classifies as Enumeration and would trigger coerce on an empty
+            // Result; on the DATA_SET path it MUST classify as String and preserve the payload.
+            const string dataItemKey = "avail_ds";
+            var dataItem = new DataItem
+            {
+                Id = $"{DeviceId}_AVAIL_DS",
+                Name = dataItemKey,
+                Category = DataItemCategory.EVENT,
+                Type = "AVAILABILITY",
+                Representation = DataItemRepresentation.DATA_SET,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedEntries = new IDataSetEntry[]
+            {
+                new DataSetEntry("channel_1", "AVAILABLE"),
+                new DataSetEntry("channel_2", "UNAVAILABLE"),
+            };
+            var input = new MTConnect.Input.DataSetObservationInput(dataItemKey, expectedEntries)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "EVENT + DATA_SET observation must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "EVENT + DATA_SET observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "EVENT + DATA_SET payload MUST NOT be corrupted to UNAVAILABLE - the Result key is absent by design");
+            Assert.That(current.GetValue(ValueKeys.Count).ToInt(), Is.EqualTo(expectedEntries.Length),
+                "EVENT + DATA_SET Count MUST survive - the coerce path must not overwrite it with 0");
+        }
+
+        /// <summary>An EVENT + TABLE observation with real Cells MUST NOT be coerced to UNAVAILABLE despite the absence of a Result key.</summary>
+        [Test]
+        public void EnumEvent_Table_Payload_Preserved_Not_Coerced()
+        {
+            const string dataItemKey = "avail_tab";
+            var dataItem = new DataItem
+            {
+                Id = $"{DeviceId}_AVAIL_TAB",
+                Name = dataItemKey,
+                Category = DataItemCategory.EVENT,
+                Type = "AVAILABILITY",
+                Representation = DataItemRepresentation.TABLE,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedEntries = new ITableEntry[]
+            {
+                new TableEntry("row_1", new ITableCell[]
+                {
+                    new TableCell("state", "AVAILABLE"),
+                    new TableCell("nested", "UNAVAILABLE"),
+                }),
+            };
+            var input = new MTConnect.Input.TableObservationInput(dataItemKey, expectedEntries)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "EVENT + TABLE observation must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "EVENT + TABLE observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "EVENT + TABLE payload MUST NOT be corrupted to UNAVAILABLE - the Result key is absent by design");
+            Assert.That(current.GetValue(ValueKeys.Count).ToInt(), Is.EqualTo(expectedEntries.Length),
+                "EVENT + TABLE Count MUST survive - the coerce path must not overwrite it with 0");
+        }
+
+
+        // -------------------------------------------------------------------- //
+        // Explicit empty / whitespace Result on non-VALUE representations      //
+        // A caller who explicitly writes Result="" or Result="   " onto a      //
+        // TIME_SERIES / DATA_SET / TABLE observation MUST see the value        //
+        // preserved verbatim - the coerce path is out of scope for these      //
+        // representations regardless of what the caller wrote. Exercises the   //
+        // switch default: return false; branch of                              //
+        // ShouldCoerceEmptyResultToUnavailable via IsEmptyResult == true.      //
+        // -------------------------------------------------------------------- //
+
+        /// <summary>A TIME_SERIES SAMPLE with an explicit empty-string Result key MUST preserve the payload: IsEmptyResult fires but the classifier short-circuits to String so the coerce does not.</summary>
+        [Test]
+        public void Sample_TimeSeries_Explicit_EmptyResult_Preserved()
+        {
+            const string dataItemKey = SpindleSpeedDataItem.NameId;
+            var dataItem = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.TIME_SERIES,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedSamples = new[] { 4.0, 5.0, 6.0 };
+            var input = new MTConnect.Input.TimeSeriesObservationInput(dataItemKey, expectedSamples, sampleRate: 10.0)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+            input.SampleCount = expectedSamples.Length;
+
+            // Explicitly write an empty-string Result key on top of the structured payload -
+            // simulates a caller (or upstream layer) that stamps ValueKeys.Result unconditionally.
+            input.AddValue(ValueKeys.Result, string.Empty);
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "TIME_SERIES SAMPLE with explicit empty Result must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "empty Result on a TIME_SERIES SAMPLE must NOT be coerced to UNAVAILABLE - the non-VALUE short-circuit governs");
+            Assert.That(current.GetValue(ValueKeys.SampleCount).ToInt(), Is.EqualTo(expectedSamples.Length),
+                "SampleCount MUST survive - IsUnavailable must remain false so the representation switch does not stamp SampleCount=0");
+            Assert.That(TimeSeriesObservation.GetSamples(current.Values).ToArray(), Is.EqualTo(expectedSamples),
+                "Samples payload MUST survive verbatim");
+        }
+
+        /// <summary>A DATA_SET SAMPLE with an explicit whitespace-only Result key MUST preserve the payload.</summary>
+        [Test]
+        public void Sample_DataSet_Explicit_WhitespaceResult_Preserved()
+        {
+            const string dataItemKey = SpindleSpeedDataItem.NameId;
+            var dataItem = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.DATA_SET,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedEntries = new IDataSetEntry[]
+            {
+                new DataSetEntry("a", "1.0"),
+                new DataSetEntry("b", "2.0"),
+                new DataSetEntry("c", "3.0"),
+            };
+            var input = new MTConnect.Input.DataSetObservationInput(dataItemKey, expectedEntries)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+            input.AddValue(ValueKeys.Result, "   ");
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "DATA_SET SAMPLE with explicit whitespace Result must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "whitespace Result on a DATA_SET SAMPLE must NOT be coerced to UNAVAILABLE - the non-VALUE short-circuit governs");
+            Assert.That(current.GetValue(ValueKeys.Count).ToInt(), Is.EqualTo(expectedEntries.Length),
+                "Count MUST survive - IsUnavailable must remain false so the representation switch does not stamp Count=0");
+        }
+
+        /// <summary>A TABLE SAMPLE with an explicit empty-string Result key MUST preserve the payload.</summary>
+        [Test]
+        public void Sample_Table_Explicit_EmptyResult_Preserved()
+        {
+            const string dataItemKey = SpindleSpeedDataItem.NameId;
+            var dataItem = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.TABLE,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedEntries = new ITableEntry[]
+            {
+                new TableEntry("row1", new ITableCell[]
+                {
+                    new TableCell("col1", "1.0"),
+                }),
+            };
+            var input = new MTConnect.Input.TableObservationInput(dataItemKey, expectedEntries)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+            input.AddValue(ValueKeys.Result, string.Empty);
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "TABLE SAMPLE with explicit empty Result must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "empty Result on a TABLE SAMPLE must NOT be coerced to UNAVAILABLE - the non-VALUE short-circuit governs");
+            Assert.That(current.GetValue(ValueKeys.Count).ToInt(), Is.EqualTo(expectedEntries.Length),
+                "Count MUST survive - IsUnavailable must remain false so the representation switch does not stamp Count=0");
+        }
+
 
         // -------------------------------------------------------------------- //
         // Helpers                                                              //
