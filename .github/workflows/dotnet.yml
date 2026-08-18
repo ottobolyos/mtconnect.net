@@ -25,6 +25,43 @@ on:
 
 jobs:
   # ------------------------------------------------------------------
+  # Job 0 — dotnet format gate. Verifies the tree matches the
+  # repository's .editorconfig with zero diff, so formatting drift
+  # (indentation, brace placement, whitespace) is caught at PR time
+  # instead of silently accumulating into the baseline every
+  # subsequent branch then has to inherit. Uses the default "warn"
+  # severity — the same severity `dotnet format` applies with no
+  # --severity flag — rather than --severity info: at info severity
+  # dotnet format additionally tries to auto-fix long-standing Roslyn
+  # analyzer diagnostics (CA1859, CA1861, CA1018, ...) across the
+  # repo, which is a materially different (and, on this SDK/analyzer
+  # combination, occasionally crash-prone) undertaking from verifying
+  # whitespace/style formatting and is out of scope for this gate.
+  # Runs on the same draft-skip gate as the other jobs and does not
+  # depend on them, so a formatting-only fix gets fast feedback.
+  # ------------------------------------------------------------------
+  format:
+    name: format
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Setup .NET 8.0 + 9.0
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Restore solution
+        run: dotnet restore MTConnect.NET.sln
+
+      - name: Verify format (dotnet format --verify-no-changes)
+        run: dotnet format MTConnect.NET.sln --verify-no-changes --no-restore
+
+  # ------------------------------------------------------------------
   # Job 1 — unsharded unit + integration sweep on both OS legs.
   # Excludes Category=E2E altogether; the route walk is handled in
   # job 3 below. windows-latest additionally excludes
