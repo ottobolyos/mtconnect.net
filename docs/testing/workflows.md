@@ -96,7 +96,7 @@ code. Freezing the ruleset with a committed `.editorconfig` +
 `global.json` SDK pin is a tracked follow-up (see the format-baseline
 PR description).
 
-### Jobs 1-4 — build, test, docs, route-check
+### Jobs 1–4 — build, test, docs, route-check
 
 **Steps:**
 

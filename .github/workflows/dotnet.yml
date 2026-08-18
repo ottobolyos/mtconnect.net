@@ -81,16 +81,20 @@ jobs:
       # the gate is meant to catch. Restore + verify them explicitly
       # rather than adding them to the solution (which would compile
       # them on every unrelated build and complicate the template
-      # packaging step).
-      - name: Restore template projects
-        run: |
-          dotnet restore templates/mtconnect.net-agent/MTConnect-NET-Agent-Template.csproj
-          dotnet restore templates/mtconnect.net-agent/content/MTConnect.NET-Embedded-Agent/Agent.csproj
+      # packaging step). Each project gets its own restore + verify
+      # step so a failure names the specific template in the Actions
+      # step-summary panel rather than in the collapsed log.
+      - name: Restore template descriptor
+        run: dotnet restore templates/mtconnect.net-agent/MTConnect-NET-Agent-Template.csproj
 
-      - name: Verify template format (dotnet format --verify-no-changes)
-        run: |
-          dotnet format templates/mtconnect.net-agent/MTConnect-NET-Agent-Template.csproj --verify-no-changes --no-restore --verbosity diagnostic
-          dotnet format templates/mtconnect.net-agent/content/MTConnect.NET-Embedded-Agent/Agent.csproj --verify-no-changes --no-restore --verbosity diagnostic
+      - name: Restore template content project
+        run: dotnet restore templates/mtconnect.net-agent/content/MTConnect.NET-Embedded-Agent/Agent.csproj
+
+      - name: Verify template descriptor format
+        run: dotnet format templates/mtconnect.net-agent/MTConnect-NET-Agent-Template.csproj --verify-no-changes --no-restore --verbosity diagnostic
+
+      - name: Verify template content project format
+        run: dotnet format templates/mtconnect.net-agent/content/MTConnect.NET-Embedded-Agent/Agent.csproj --verify-no-changes --no-restore --verbosity diagnostic
 
   # ------------------------------------------------------------------
   # Job 1 — unsharded unit + integration sweep on both OS legs.
