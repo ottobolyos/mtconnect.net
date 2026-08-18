@@ -133,17 +133,62 @@ namespace MTConnect.Configurations
         [JsonPropertyName("enableValidation")]
         public bool EnableValidation { get; set; }
 
-        /// <summary>
-        /// Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict
-        /// </summary>
-        [JsonPropertyName("deviceValidationLevel")]
-        public DeviceValidationLevel DeviceValidationLevel { get; set; }
+        private DeviceValidationLevel _deviceValidationLevel;
+        private bool _isDeviceValidationLevelExplicit;
+        private InputValidationLevel _inputValidationLevel;
 
         /// <summary>
-        /// Gets or Sets the default Input (Observation or Asset) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict
+        /// Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict.
         /// </summary>
+        /// <remarks>
+        /// When a configuration file omits this key the loader mirrors <see cref="InputValidationLevel"/>
+        /// onto Device validation, preserving pre-v7 behaviour for consumers that only knew the single
+        /// <see cref="InputValidationLevel"/> knob. Setting this property — either programmatically or via a
+        /// key present in the source document — marks the value as explicit and disables the mirror on the
+        /// next <see cref="Normalize"/>. An assignment whose ordinal is not a defined enum arm raises
+        /// <see cref="ArgumentOutOfRangeException"/>.
+        /// </remarks>
+        [JsonPropertyName("deviceValidationLevel")]
+        public DeviceValidationLevel DeviceValidationLevel
+        {
+            get => _deviceValidationLevel;
+            set
+            {
+                if (!Enum.IsDefined(typeof(DeviceValidationLevel), value))
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        value,
+                        "DeviceValidationLevel must be one of Ignore (0), Warning (1), Remove (2), Strict (3).");
+                }
+                _deviceValidationLevel = value;
+                _isDeviceValidationLevelExplicit = true;
+            }
+        }
+
+        /// <summary>
+        /// Gets or Sets the default Input (Observation or Asset) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict.
+        /// </summary>
+        /// <remarks>
+        /// An assignment whose ordinal is not a defined enum arm raises
+        /// <see cref="ArgumentOutOfRangeException"/>.
+        /// </remarks>
         [JsonPropertyName("inputValidationLevel")]
-        public InputValidationLevel InputValidationLevel { get; set; }
+        public InputValidationLevel InputValidationLevel
+        {
+            get => _inputValidationLevel;
+            set
+            {
+                if (!Enum.IsDefined(typeof(InputValidationLevel), value))
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        value,
+                        "InputValidationLevel must be one of Ignore (0), Warning (1), Remove (2), Strict (3).");
+                }
+                _inputValidationLevel = value;
+            }
+        }
 
         /// <summary>
         /// Gets or Sets whether an empty, null, or whitespace-only Result is preserved for Event DataItems
@@ -178,13 +223,37 @@ namespace MTConnect.Configurations
             ObservationBufferSize = 131072;
             AssetBufferSize = 1024;
             DefaultVersion = MTConnectVersions.Max;
-            DeviceValidationLevel = DeviceValidationLevel.Warning;
-            InputValidationLevel = InputValidationLevel.Warning;
+            // Assign the backing fields directly. Going through the public setter would flip
+            // _isDeviceValidationLevelExplicit and disable the load-time migration mirror.
+            _deviceValidationLevel = DeviceValidationLevel.Warning;
+            _inputValidationLevel = InputValidationLevel.Warning;
+            _isDeviceValidationLevelExplicit = false;
             AllowEmptyResultForEnumEvents = false;
             ConvertUnits = true;
             IgnoreObservationCase = false;
             EnableAgentDevice = true;
             EnableMetrics = true;
+        }
+
+        /// <summary>
+        /// Applies post-deserialisation defaults that depend on cross-property state.
+        /// When the source configuration omitted <see cref="DeviceValidationLevel"/>, mirror
+        /// <see cref="InputValidationLevel"/> onto it. Both enums share ordinals 0-3, so the mirror is a
+        /// direct cast.
+        /// </summary>
+        /// <remarks>
+        /// Invoked by every <see cref="Read{T}(string)"/> / <see cref="ReadJson{T}(string)"/> /
+        /// <see cref="ReadYaml{T}(string)"/> path so consumers who only set
+        /// <see cref="InputValidationLevel"/> in their configuration observe the same Device-validation
+        /// behaviour they got before the split. Callers loading a configuration programmatically may invoke
+        /// <see cref="Normalize"/> once construction is complete to pick up the same default.
+        /// </remarks>
+        public void Normalize()
+        {
+            if (!_isDeviceValidationLevelExplicit)
+            {
+                _deviceValidationLevel = (DeviceValidationLevel)(int)_inputValidationLevel;
+            }
         }
 
 
@@ -290,6 +359,7 @@ namespace MTConnect.Configurations
 
                         var configuration = JsonSerializer.Deserialize<T>(text, options);
                         configuration.Path = configurationPath;
+                        configuration.Normalize();
                         return configuration;
                     }
                 }
@@ -330,6 +400,7 @@ namespace MTConnect.Configurations
 
                         var configuration = (AgentConfiguration)JsonSerializer.Deserialize(text, type, options);
                         configuration.Path = configurationPath;
+                        configuration.Normalize();
                         return configuration;
                     }
                 }
@@ -371,6 +442,7 @@ namespace MTConnect.Configurations
 
                         var configuration = deserializer.Deserialize<T>(text);
                         configuration.Path = configurationPath;
+                        configuration.Normalize();
                         return configuration;
                     }
                 }
@@ -411,6 +483,7 @@ namespace MTConnect.Configurations
 
                         var configuration = (AgentConfiguration)deserializer.Deserialize(text, type);
                         configuration.Path = configurationPath;
+                        configuration.Normalize();
                         return configuration;
                     }
                 }
