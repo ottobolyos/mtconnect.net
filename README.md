@@ -246,6 +246,18 @@ This repo along with the libraries and applications are free to use and distribu
 
 Feel free to comment, or create pull-requests for anything that could be coded, formatted, or worded better. Attention to detail and continuous improvement are important in manufacturing so they should be just as important for manufacturing software.
 
+### Contributing — running the formatting gate locally
+
+Every push to `master` and every non-draft PR runs `dotnet format MTConnect.NET.sln --verify-no-changes` in CI (job `format`, defined in [`.github/workflows/dotnet.yml`](.github/workflows/dotnet.yml)). Before pushing, reproduce the check locally with:
+
+```bash
+dotnet restore MTConnect.NET.sln
+dotnet format MTConnect.NET.sln                                     # autofix in place
+dotnet format MTConnect.NET.sln --verify-no-changes --verbosity diagnostic   # dry-run, same as CI
+```
+
+See [`docs/testing/workflows.md`](docs/testing/workflows.md#job-0--format) for the full gate description, the template-project coverage step, and the tracked follow-ups (root `.editorconfig` + `global.json` SDK pin).
+
 Thanks for your interest in using these libraries and applications and feel free to contribute or give feedback.
 
 \- Patrick
