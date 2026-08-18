@@ -106,17 +106,22 @@ namespace MTConnect.Servers
                     var bufferSize = 1048576 * 2; // 2 MB
                     var bytes = new byte[bufferSize];
 
-#if NET9_0_OR_GREATER
-                    await inputStream.ReadExactlyAsync(bytes, 0, bytes.Length);
-                    return TrimEnd(bytes);
-#else
-                    // CA2022 short-read handling on non-net9 TFMs. The
-                    // ReadAsync return count is captured and accumulated
-                    // across short reads until EOF or the buffer is full.
-                    // Truncating to the actual filled length removes the
-                    // pre-fix TrimEnd-on-zero-byte heuristic that
-                    // over-truncated bodies whose final byte legitimately
-                    // was 0x00.
+                    // CA2022 short-read accumulator — TFM-uniform. Every supported
+                    // TFM lands on the same shape: loop ReadAsync until EOF or the
+                    // buffer is full, then truncate to the actually-filled length.
+                    // The underlying stream (Ceen.Httpd.LimitedBodyStream or the
+                    // hosting server's request body) already respects Content-Length
+                    // framing at a lower layer; the accumulator only needs to
+                    // survive multi-segment TCP arrivals. Matches the boost::beast
+                    // HTTP parser cppagent uses (src/mtconnect/sink/rest_sink/
+                    // session_impl.cpp:176-181), which likewise returns the exact
+                    // body length rather than a zero-padded buffer needing TrimEnd.
+                    //
+                    // Do NOT re-introduce a ReadExactlyAsync-into-fixed-buffer +
+                    // TrimEnd shape: ReadExactlyAsync on a body smaller than the
+                    // buffer throws EndOfStreamException (silently swallowed by the
+                    // outer catch, dropping the request), and TrimEnd would corrupt
+                    // any payload whose final legitimate byte is 0x00.
                     var totalRead = 0;
                     while (totalRead < bytes.Length)
                     {
@@ -129,21 +134,11 @@ namespace MTConnect.Servers
                     var result = new byte[totalRead];
                     Array.Copy(bytes, 0, result, 0, totalRead);
                     return result;
-#endif
                 }
                 catch { }
             }
 
             return null;
-        }
-
-        public static byte[] TrimEnd(byte[] array)
-        {
-            int lastIndex = Array.FindLastIndex(array, b => b != 0);
-
-            Array.Resize(ref array, lastIndex + 1);
-
-            return array;
         }
     }
 }
