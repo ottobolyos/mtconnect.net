@@ -95,7 +95,7 @@ namespace MTConnect.SysML.CSharp
                                                 }
                                             }
 
-                                            break;                               
+                                            break;
                                     }
                                 }
                             }
@@ -810,7 +810,7 @@ namespace MTConnect.SysML.CSharp
 
 
         private static string ConvertUnitEnum(string input)
-        {           
+        {
             var output = input;
 
             if (output != null)

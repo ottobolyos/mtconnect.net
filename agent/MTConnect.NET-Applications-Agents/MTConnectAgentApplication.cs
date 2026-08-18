@@ -582,7 +582,7 @@ namespace MTConnect.Applications
                         _agentLogger.Warn($"No Devices Found : Reading from : {configuration.Devices}");
                     }
                 }
-                
+
 
                 // Initilialize Processors
                 _processors = new MTConnectAgentProcessors(configuration);

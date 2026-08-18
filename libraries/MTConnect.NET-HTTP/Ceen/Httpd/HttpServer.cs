@@ -176,9 +176,9 @@ namespace Ceen.Httpd
             [SupportedOSPlatform("windows")]
 #endif
             public void HandleRequest(SocketInformation socket, EndPoint remoteEndPoint, string logtaskid)
-			{
-				RunClient(socket, remoteEndPoint, logtaskid, Controller);
-			}
+            {
+                RunClient(socket, remoteEndPoint, logtaskid, Controller);
+            }
 
             /// <summary>
             /// Requests that this instance stops serving requests
@@ -873,9 +873,9 @@ namespace Ceen.Httpd
         [SupportedOSPlatform("windows")]
 #endif
         private static void RunClient(SocketInformation socketinfo, EndPoint remoteEndPoint, string logtaskid, RunnerControl controller)
-		{
-			RunClient(new Socket(socketinfo), remoteEndPoint, logtaskid, controller);
-		}
+        {
+            RunClient(new Socket(socketinfo), remoteEndPoint, logtaskid, controller);
+        }
 
         /// <summary>
         /// Handler method for connections
