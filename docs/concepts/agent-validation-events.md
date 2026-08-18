@@ -190,7 +190,9 @@ The event family is designed to grow. When a new element class becomes validatab
    [Test]
    public void InvalidDeviceModelAdded_fires_and_the_device_is_not_added()
    {
-       var agent = new MTConnectAgent(new AgentConfiguration { InputValidationLevel = InputValidationLevel.Strict });
+       // DeviceModel is a device-shape noun, so the test gates on
+       // DeviceValidationLevel — the same axis step 3 wires the raise-site to.
+       var agent = new MTConnectAgent(new AgentConfiguration { DeviceValidationLevel = DeviceValidationLevel.Strict });
        var fired = false;
        agent.InvalidDeviceModelAdded += (_, _, _) => fired = true;
 
