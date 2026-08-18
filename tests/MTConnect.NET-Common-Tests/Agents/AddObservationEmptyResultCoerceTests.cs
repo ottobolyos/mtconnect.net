@@ -405,6 +405,145 @@ namespace MTConnect.Tests.Common.Agents
 
 
         // -------------------------------------------------------------------- //
+        // Structured-representation SAMPLE tests                               //
+        // Spec: MTConnect Part 2, Value Properties of Sample - the             //
+        // DATA_SET / TABLE / TIME_SERIES representations carry structured      //
+        // payloads (Entries, Cells, Samples) rather than a single Result.      //
+        // The empty-Result coerce MUST NOT fire for these representations:     //
+        // their inputs legitimately omit the Result key by design, and         //
+        // corrupting them with the UNAVAILABLE sentinel would break spec       //
+        // compliance for every legitimate multi-value observation.             //
+        // -------------------------------------------------------------------- //
+
+        /// <summary>A TIME_SERIES SAMPLE observation with a real Samples payload MUST NOT be coerced to UNAVAILABLE despite the absence of a Result key.</summary>
+        [Test]
+        public void Sample_TimeSeries_Payload_Preserved_Not_Coerced()
+        {
+            const string dataItemKey = SpindleSpeedDataItem.NameId;
+            var dataItem = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.TIME_SERIES,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedSamples = new[] { 1.0, 2.0, 3.0 };
+            var input = new MTConnect.Input.TimeSeriesObservationInput(dataItemKey, expectedSamples, sampleRate: 10.0)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+            input.SampleCount = expectedSamples.Length;
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "TIME_SERIES SAMPLE observation must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "TIME_SERIES SAMPLE observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "TIME_SERIES SAMPLE payload MUST NOT be corrupted to UNAVAILABLE - the Result key is absent by design");
+            Assert.That(current.GetValue(ValueKeys.SampleCount).ToInt(), Is.EqualTo(expectedSamples.Length),
+                "TIME_SERIES SAMPLE SampleCount MUST survive - the coerce path must not overwrite it with 0");
+            Assert.That(TimeSeriesObservation.GetSamples(current.Values).ToArray(), Is.EqualTo(expectedSamples),
+                "TIME_SERIES SAMPLE Samples payload MUST survive verbatim - no structural loss to the coerce path");
+        }
+
+        /// <summary>A DATA_SET SAMPLE observation with real Entries MUST NOT be coerced to UNAVAILABLE.</summary>
+        [Test]
+        public void Sample_DataSet_Payload_Preserved_Not_Coerced()
+        {
+            const string dataItemKey = SpindleSpeedDataItem.NameId;
+            var dataItem = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.DATA_SET,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedEntries = new IDataSetEntry[]
+            {
+                new DataSetEntry("a", "1.0"),
+                new DataSetEntry("b", "2.0"),
+            };
+            var input = new MTConnect.Input.DataSetObservationInput(dataItemKey, expectedEntries)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "DATA_SET SAMPLE observation must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "DATA_SET SAMPLE observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "DATA_SET SAMPLE payload MUST NOT be corrupted to UNAVAILABLE - the Result key is absent by design");
+            Assert.That(current.GetValue(ValueKeys.Count).ToInt(), Is.EqualTo(expectedEntries.Length),
+                "DATA_SET SAMPLE Count MUST survive - the coerce path must not overwrite it with 0");
+        }
+
+        /// <summary>A TABLE SAMPLE observation with real Cells MUST NOT be coerced to UNAVAILABLE.</summary>
+        [Test]
+        public void Sample_Table_Payload_Preserved_Not_Coerced()
+        {
+            const string dataItemKey = SpindleSpeedDataItem.NameId;
+            var dataItem = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.TABLE,
+            };
+            using var agent = NewAgent(InputValidationLevel.Warning, dataItem: dataItem);
+
+            var expectedEntries = new ITableEntry[]
+            {
+                new TableEntry("row1", new ITableCell[]
+                {
+                    new TableCell("col1", "1.0"),
+                    new TableCell("col2", "2.0"),
+                }),
+            };
+            var input = new MTConnect.Input.TableObservationInput(dataItemKey, expectedEntries)
+            {
+                DeviceKey = DeviceKey,
+                Timestamp = UnixDateTime.Now,
+            };
+
+            var added = agent.AddObservation(input);
+
+            Assert.That(added, Is.True, "TABLE SAMPLE observation must reach the buffer");
+            var current = agent.GetCurrentObservations(DeviceKey, dataItemKey).SingleOrDefault();
+            Assert.That(current, Is.Not.Null, "TABLE SAMPLE observation must be retrievable from the current-observations buffer");
+            Assert.That(current!.GetValue(ValueKeys.Result), Is.Not.EqualTo(Observation.Unavailable),
+                "TABLE SAMPLE payload MUST NOT be corrupted to UNAVAILABLE - the Result key is absent by design");
+            Assert.That(current.GetValue(ValueKeys.Count).ToInt(), Is.EqualTo(expectedEntries.Length),
+                "TABLE SAMPLE Count MUST survive - the coerce path must not overwrite it with 0");
+        }
+
+        /// <summary>Direct classifier assertion: SAMPLE DataItems with non-VALUE representations are classified as String (their coercion is not this classifier's concern).</summary>
+        [Test]
+        public void GetValueClass_Sample_NonValueRepresentation_Is_String()
+        {
+            var timeSeries = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.TIME_SERIES,
+            };
+            Assert.That(DataItem.GetValueClass(timeSeries), Is.EqualTo(DataItemValueClass.String),
+                "SAMPLE + TIME_SERIES carries a Samples payload rather than a single Result - the classifier must not report Numeric");
+
+            var dataSet = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.DATA_SET,
+            };
+            Assert.That(DataItem.GetValueClass(dataSet), Is.EqualTo(DataItemValueClass.String),
+                "SAMPLE + DATA_SET carries an Entries payload rather than a single Result - the classifier must not report Numeric");
+
+            var table = new SpindleSpeedDataItem(DeviceId, SpindleSpeedDataItem.SubTypes.ACTUAL)
+            {
+                Representation = DataItemRepresentation.TABLE,
+            };
+            Assert.That(DataItem.GetValueClass(table), Is.EqualTo(DataItemValueClass.String),
+                "SAMPLE + TABLE carries a Cells payload rather than a single Result - the classifier must not report Numeric");
+        }
+
+
+        // -------------------------------------------------------------------- //
         // Helpers                                                              //
         // -------------------------------------------------------------------- //
 
