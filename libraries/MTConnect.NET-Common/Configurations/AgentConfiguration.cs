@@ -139,6 +139,17 @@ namespace MTConnect.Configurations
         [JsonPropertyName("inputValidationLevel")]
         public InputValidationLevel InputValidationLevel { get; set; }
 
+        /// <summary>
+        /// Gets or Sets whether an empty, null, or whitespace-only Result is preserved for Event DataItems
+        /// whose Type has a controlled vocabulary (for example EXECUTION, CONTROLLER_MODE). Defaults to
+        /// <c>false</c>, which coerces such Results to <c>UNAVAILABLE</c>. Numeric DataItems (all Samples,
+        /// and the numeric-typed Events enumerated by the MTConnect Standard SysML) are always coerced
+        /// regardless of this flag; free-form String Event DataItems (PROGRAM, MESSAGE, TOOL_ID,
+        /// ASSET_CHANGED, and every other non-vocabulary Type) always preserve the empty Result.
+        /// </summary>
+        [JsonPropertyName("allowEmptyResultForEnumEvents")]
+        public bool AllowEmptyResultForEnumEvents { get; set; }
+
 
         /// <summary>
         /// Gets or Sets whether the Agent Device is output
@@ -163,6 +174,7 @@ namespace MTConnect.Configurations
             DefaultVersion = MTConnectVersions.Max;
             DeviceValidationLevel = DeviceValidationLevel.Warning;
             InputValidationLevel = InputValidationLevel.Warning;
+            AllowEmptyResultForEnumEvents = false;
             ConvertUnits = true;
             IgnoreObservationCase = false;
             EnableAgentDevice = true;

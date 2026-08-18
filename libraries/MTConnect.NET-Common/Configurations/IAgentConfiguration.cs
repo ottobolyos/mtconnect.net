@@ -75,6 +75,20 @@ namespace MTConnect.Configurations
         /// </summary>
         InputValidationLevel InputValidationLevel { get; }
 
+        /// <summary>
+        /// Gets whether an empty, null, or whitespace-only Result is preserved for Event DataItems whose
+        /// Type has a controlled vocabulary (for example EXECUTION, CONTROLLER_MODE). When <c>false</c>
+        /// (the default), such Results are coerced to <c>UNAVAILABLE</c> to satisfy the MTConnect
+        /// Standard requirement that a controlled-vocabulary Event's Result be a member of the
+        /// vocabulary. When <c>true</c>, the empty Result is published verbatim, which some
+        /// implementations rely on for parity with adapters that emit empty values.
+        /// Numeric DataItems (all Samples, and the numeric-typed Events enumerated by the SysML model)
+        /// are always coerced regardless of this flag, per the Part 2 "Sample MUST always be reported
+        /// in float" requirement. Free-form String Event DataItems (PROGRAM, MESSAGE, TOOL_ID,
+        /// ASSET_CHANGED, and every other non-vocabulary Type) always preserve the empty Result.
+        /// </summary>
+        bool AllowEmptyResultForEnumEvents { get; }
+
 
         /// <summary>
         /// Gets or Sets whether the Agent Device is output
