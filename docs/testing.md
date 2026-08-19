@@ -6,6 +6,7 @@ This page is the entry point for everything test-related in MTConnect.NET. Per-v
 
 - [`docs/testing/v2-6.md`](testing/v2-6.md) — MTConnect Standard v2.6 compliance matrix.
 - [`docs/testing/v2-7.md`](testing/v2-7.md) — MTConnect Standard v2.7 compliance matrix.
+- [`docs/testing/version-matrix-convention.md`](testing/version-matrix-convention.md) — topic-first single-file-per-topic fixture convention (how to add tests for a new spec version).
 - [`docs/testing/workflows.md`](testing/workflows.md) — CI workflow + local harness catalog.
 
 Each matrix lists every spec-defined element / attribute / enum value introduced or modified at that version with status (`Live` / `Pending`) and the test class that pins it.
