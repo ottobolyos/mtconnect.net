@@ -50,6 +50,7 @@ namespace MTConnect.NET_Common_Tests.DryGenerator
                     testsRoot,
                     "V*",
                     SearchOption.AllDirectories)
+                .Where(path => !IsUnderIgnoredDirectory(path))
                 .Where(IsPerVersionDirectoryName)
                 .Select(path => Path.GetRelativePath(testsRoot, path))
                 .OrderBy(x => x, StringComparer.Ordinal)
