@@ -3,8 +3,8 @@
 
 using MTConnect.Observations;
 using MTConnect.Observations.Output;
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace MTConnect.Streams.Json
@@ -32,8 +32,13 @@ namespace MTConnect.Streams.Json
     /// (<c>FAULT</c> → <c>WARNING</c> → <c>NORMAL</c> → <c>UNAVAILABLE</c>,
     /// source order within each level) so this rewrite is byte-identical
     /// on the wire to the pre-refactor converter output for the same
-    /// observation input; callers constructing via the copy ctor or
-    /// direct <see cref="List{T}.Add(T)"/> control ordering explicitly.
+    /// observation input <b>when the emission pipeline supplies the same
+    /// <see cref="System.Text.Json.JsonSerializerOptions"/> the converter
+    /// path used</b> (in particular, per-property
+    /// <c>[JsonIgnore(WhenWritingNull)]</c> makes wrapper output single-key
+    /// regardless of the ambient <c>DefaultIgnoreCondition</c>). Callers
+    /// constructing via the copy ctor or direct
+    /// <see cref="List{T}.Add(T)"/> control ordering explicitly.
     /// </para>
     /// </remarks>
     public sealed class JsonConditions : List<JsonConditionWrapper>
@@ -49,8 +54,13 @@ namespace MTConnect.Streams.Json
         /// wrappers. Order is preserved from
         /// <paramref name="wrappers"/>.
         /// </summary>
+        /// <param name="wrappers">
+        /// The wrapper sequence to seed the list with. A
+        /// <see langword="null"/> reference is treated as an empty
+        /// sequence.
+        /// </param>
         public JsonConditions(IEnumerable<JsonConditionWrapper> wrappers)
-            : base(wrappers ?? Enumerable.Empty<JsonConditionWrapper>())
+            : base(wrappers ?? Array.Empty<JsonConditionWrapper>())
         {
         }
 
@@ -63,14 +73,35 @@ namespace MTConnect.Streams.Json
         /// byte-identical to the pre-refactor converter for the same
         /// input.
         /// </summary>
+        /// <param name="observations">
+        /// The observation-output sequence to project into wrappers. A
+        /// <see langword="null"/> reference and <see langword="null"/>
+        /// entries are skipped; entries whose
+        /// <see cref="ValueKeys.Level"/> value does not match a
+        /// <see cref="ConditionLevel"/> arm are dropped (matches the
+        /// pre-refactor converter). The sequence is enumerated exactly
+        /// once: the ctor buffers it into a local list before the four
+        /// level-partition passes so caller-supplied lazy / deferred
+        /// enumerables (LINQ queries, generators) are not re-evaluated.
+        /// </param>
         public JsonConditions(IEnumerable<IObservationOutput> observations)
         {
             if (observations == null) return;
 
-            AppendLevel(observations, ConditionLevel.FAULT,       JsonConditionWrapper.OfFault);
-            AppendLevel(observations, ConditionLevel.WARNING,     JsonConditionWrapper.OfWarning);
-            AppendLevel(observations, ConditionLevel.NORMAL,      JsonConditionWrapper.OfNormal);
-            AppendLevel(observations, ConditionLevel.UNAVAILABLE, JsonConditionWrapper.OfUnavailable);
+            // Buffer once — the four level partitions each need a full
+            // pass, and caller-supplied lazy sequences (LINQ queries,
+            // generators, side-effecting iterators) must not be
+            // re-evaluated.
+            var buffered = new List<IObservationOutput>();
+            foreach (var observation in observations)
+            {
+                if (observation != null) buffered.Add(observation);
+            }
+
+            AppendLevel(buffered, LevelNameFault,       JsonConditionWrapper.OfFault);
+            AppendLevel(buffered, LevelNameWarning,     JsonConditionWrapper.OfWarning);
+            AppendLevel(buffered, LevelNameNormal,      JsonConditionWrapper.OfNormal);
+            AppendLevel(buffered, LevelNameUnavailable, JsonConditionWrapper.OfUnavailable);
         }
 
         /// <summary>
@@ -94,15 +125,24 @@ namespace MTConnect.Streams.Json
             }
         }
 
+        // Level names materialised once — enum ToString() would
+        // otherwise allocate a fresh string per AppendLevel call.
+        private const string LevelNameFault       = nameof(ConditionLevel.FAULT);
+        private const string LevelNameWarning     = nameof(ConditionLevel.WARNING);
+        private const string LevelNameNormal      = nameof(ConditionLevel.NORMAL);
+        private const string LevelNameUnavailable = nameof(ConditionLevel.UNAVAILABLE);
+
         private void AppendLevel(
-            IEnumerable<IObservationOutput> observations,
-            ConditionLevel level,
-            System.Func<JsonCondition, JsonConditionWrapper> factory)
+            List<IObservationOutput> observations,
+            string levelName,
+            Func<JsonCondition, JsonConditionWrapper> factory)
         {
-            var levelName = level.ToString();
-            foreach (var observation in observations.Where(o => o != null && o.GetValue(ValueKeys.Level) == levelName))
+            foreach (var observation in observations)
             {
-                Add(factory(new JsonCondition(observation)));
+                if (observation.GetValue(ValueKeys.Level) == levelName)
+                {
+                    Add(factory(new JsonCondition(observation)));
+                }
             }
         }
     }

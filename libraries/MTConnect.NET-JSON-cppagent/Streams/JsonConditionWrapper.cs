@@ -93,24 +93,44 @@ namespace MTConnect.Streams.Json
         /// Constructs a wrapper carrying the given condition at
         /// <c>FAULT</c> level.
         /// </summary>
+        /// <param name="condition">The condition payload to wrap.</param>
+        /// <returns>
+        /// A new <see cref="JsonConditionWrapper"/> with only
+        /// <see cref="Fault"/> populated.
+        /// </returns>
         public static JsonConditionWrapper OfFault(JsonCondition condition)       => new JsonConditionWrapper { Fault       = condition };
 
         /// <summary>
         /// Constructs a wrapper carrying the given condition at
         /// <c>WARNING</c> level.
         /// </summary>
+        /// <param name="condition">The condition payload to wrap.</param>
+        /// <returns>
+        /// A new <see cref="JsonConditionWrapper"/> with only
+        /// <see cref="Warning"/> populated.
+        /// </returns>
         public static JsonConditionWrapper OfWarning(JsonCondition condition)     => new JsonConditionWrapper { Warning     = condition };
 
         /// <summary>
         /// Constructs a wrapper carrying the given condition at
         /// <c>NORMAL</c> level.
         /// </summary>
+        /// <param name="condition">The condition payload to wrap.</param>
+        /// <returns>
+        /// A new <see cref="JsonConditionWrapper"/> with only
+        /// <see cref="Normal"/> populated.
+        /// </returns>
         public static JsonConditionWrapper OfNormal(JsonCondition condition)      => new JsonConditionWrapper { Normal      = condition };
 
         /// <summary>
         /// Constructs a wrapper carrying the given condition at
         /// <c>UNAVAILABLE</c> level.
         /// </summary>
+        /// <param name="condition">The condition payload to wrap.</param>
+        /// <returns>
+        /// A new <see cref="JsonConditionWrapper"/> with only
+        /// <see cref="Unavailable"/> populated.
+        /// </returns>
         public static JsonConditionWrapper OfUnavailable(JsonCondition condition) => new JsonConditionWrapper { Unavailable = condition };
 
         /// <summary>
@@ -120,6 +140,13 @@ namespace MTConnect.Streams.Json
         /// wrapper is empty. Precedence on multi-populated wrappers
         /// matches <see cref="Level"/>.
         /// </summary>
+        /// <returns>
+        /// The <see cref="IConditionObservation"/> materialized at the
+        /// first non-null level under the
+        /// <c>Fault → Warning → Normal → Unavailable</c> precedence, or
+        /// <see langword="null"/> when every level property is
+        /// <see langword="null"/>.
+        /// </returns>
         public IConditionObservation ToObservation()
         {
             if (Fault       != null) return Fault.ToCondition(ConditionLevel.FAULT);
