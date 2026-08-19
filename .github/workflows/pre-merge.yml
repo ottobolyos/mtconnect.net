@@ -59,8 +59,7 @@ jobs:
           set -euo pipefail
           npm install --no-save --no-audit --no-fund \
             @commitlint/cli@^19 \
-            @commitlint/config-conventional@^19 \
-            commitlint-plugin-selective-scope@^1
+            @commitlint/config-conventional@^19
 
       - name: Determine commit range
         id: range
