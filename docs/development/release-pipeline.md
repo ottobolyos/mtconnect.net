@@ -21,7 +21,7 @@ collapses into the latest push and cancels any in-flight prior run.
 | `docker-amd64` | `ubuntu-latest` | Native `linux/amd64` image via `docker buildx build`, pushed as `<image>:<version>-amd64`. |
 | `docker-arm64` | `ubuntu-24.04-arm` | Native `linux/arm64` image, pushed as `<image>:<version>-arm64`. |
 | `docker-manifest` | `ubuntu-latest` | Merges the two per-arch tags into a single multi-arch tag `<image>:<version>` via `docker buildx imagetools create`. |
-| `sbom` | `ubuntu-latest` | SPDX SBOMs — `Microsoft.Sbom.DotNetTool` over the `.nupkg` set + `docker scout sbom` over the merged image. |
+| `sbom` | `ubuntu-latest` | SPDX SBOMs — `Microsoft.Sbom.DotNetTool` over the `.nupkg` set + `anchore/sbom-action` (syft) over the merged image. |
 | `vuln-scan` | `ubuntu-latest` | `aquasecurity/trivy-action` scans the `.nupkg` set and the Docker image; SARIF uploaded to the Security tab. |
 | `publish-nuget` | `ubuntu-latest` | `dotnet nuget push` every `.nupkg` to nuget.org via `NUGET_API_KEY`. |
 | `create-gh-release` | `ubuntu-latest` | `gh release create v<version> --prerelease` with SBOMs + `.nupkg`s attached and the Docker image ref in the notes. |

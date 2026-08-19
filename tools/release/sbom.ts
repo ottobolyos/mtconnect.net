@@ -9,9 +9,15 @@
  *      as a global dotnet tool (`dotnet tool install --global
  *      Microsoft.Sbom.DotNetTool`) before this script runs; the
  *      release workflow's `sbom` job does that in a preceding step.
- *   2. `--docker <image:tag>` — invokes `docker scout sbom
- *      --format spdx-json` against a locally-built image and writes
- *      the result to `<output>/docker-<image>-<tag>.spdx.json`.
+ *   2. `--docker <image:tag>` — invokes `syft <image:tag> -o
+ *      spdx-json=<output>/…`. Syft is the SBOM engine that Anchore
+ *      ship inside the `anchore/sbom-action` GitHub Action the
+ *      workflow uses for its CI path — running syft directly from
+ *      this script keeps the local `--dry-run` output shape aligned
+ *      with what CI produces. `docker scout sbom` was the previous
+ *      backend and is no longer used: it required a `docker scout`
+ *      install on the runner and produced a materially different
+ *      SPDX shape from the anchore/syft baseline.
  *
  * Usage:
  *   tsx tools/release/sbom.ts --nuget [--input <dir>] [--output <dir>] [--dry-run]
@@ -96,21 +102,14 @@ export const main = async (argv: string[]): Promise<void> => {
   }
 
   // Docker mode — the image should already be present locally (built
-  // by `docker-build.ts`). `docker scout sbom` streams JSON on stdout;
-  // capture with the shell redirect the workflow wires up.
+  // by `docker-build.ts` and pulled by the workflow). Syft scans the
+  // image layers and writes SPDX-JSON straight to disk. Same engine
+  // as `anchore/sbom-action` so local + CI outputs agree.
   if (!opts.dockerImage) throw new Error('--docker image tag is required in docker mode');
   const slug = opts.dockerImage.replace(/[^A-Za-z0-9._-]/g, '_');
   const outFile = resolve(opts.output, `${slug}.spdx.json`);
-  const args = [
-    'scout',
-    'sbom',
-    '--format',
-    'spdx',
-    '--output',
-    outFile,
-    opts.dockerImage,
-  ];
-  await run('docker', args, { dryRun: opts.dryRun });
+  const args = [opts.dockerImage, '-o', `spdx-json=${outFile}`];
+  await run('syft', args, { dryRun: opts.dryRun });
 };
 
 const invokedDirectly = (() => {

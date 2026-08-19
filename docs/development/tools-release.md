@@ -60,7 +60,8 @@ tsx tools/release/docker-push.ts --version 7.0.0-dev.42 --manifest
 
 Generates an SPDX SBOM for either the `.nupkg` set (via
 `Microsoft.Sbom.DotNetTool`) or a specific Docker image (via
-`docker scout sbom`). Writes outputs to `build/output/sbom/`.
+`syft`, the SBOM engine `anchore/sbom-action` wraps in CI). Writes
+outputs to `build/output/sbom/`.
 
 ```
 tsx tools/release/sbom.ts --nuget --input build/output/nupkg
