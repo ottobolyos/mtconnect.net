@@ -450,6 +450,15 @@ namespace MTConnect.Applications
                     hostname: System.Environment.MachineName,
                     warn: message => _applicationLogger?.Warn(message));
 
+                // Happy-path visibility: operators reading the startup log after
+                // a UUID-related field-support ticket should see which UUID the
+                // agent adopted without having to reproduce the resolver's
+                // three-path decision from configuration state.
+                _applicationLogger?.Info(string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "Agent meta-device UUID resolved: {0}",
+                    agentInformation.Uuid));
+
                 // Create Observation File Buffer
                 if (configuration.Durable)
                 {

@@ -114,18 +114,22 @@ namespace MTConnect.Agents
                 return normalizedOverride;
             }
 
-            // Hoist Path 2 validity + normalisation so Path 1's rejection
+            // Hoist Path 2 validity + normalization so Path 1's rejection
             // warning can label the fallback kind without a second parse of
             // the persisted value.
             var persistedIsValid = DeterministicAgentUuid.TryValidate(persistedUuid, out var normalizedPersisted);
 
             // Path 1 rejected but operator supplied something → warn (length only).
+            // Message wording is intentionally broad: TryValidate rejects unparseable
+            // input AND the RFC 4122 nil UUID (Guid.Empty), which does parse but
+            // would collide across every misconfigured agent — so "not acceptable"
+            // covers both causes without leaking which one the operator hit.
             if (!string.IsNullOrEmpty(operatorSuppliedUuid))
             {
                 var fallbackKind = persistedIsValid ? "persisted" : "derived";
                 warn?.Invoke(string.Format(
                     CultureInfo.InvariantCulture,
-                    "AgentUuid override (length={0}) is not a valid RFC 4122 UUID; falling back to {1} UUID.",
+                    "AgentUuid override (length={0}) is not an acceptable RFC 4122 UUID (must be non-empty, parseable, and not the all-zero nil UUID); falling back to {1} UUID.",
                     operatorSuppliedUuid.Length,
                     fallbackKind));
             }
@@ -141,7 +145,7 @@ namespace MTConnect.Agents
             {
                 warn?.Invoke(string.Format(
                     CultureInfo.InvariantCulture,
-                    "Persisted AgentUuid in agent.information.json (length={0}) is not a valid RFC 4122 UUID; falling back to derived UUID.",
+                    "Persisted AgentUuid in agent.information.json (length={0}) is not an acceptable RFC 4122 UUID (must be non-empty, parseable, and not the all-zero nil UUID); falling back to derived UUID.",
                     persistedUuid.Length));
             }
 

@@ -163,7 +163,7 @@ namespace MTConnect.Tests.Common.Agents
 
         /// <summary>
         /// <see cref="DeterministicAgentUuid.TryValidate"/> normalizes the
-        /// braced "B", parenthesised "P", and bare-hex "N" forms to the
+        /// braced "B", parenthesized "P", and bare-hex "N" forms to the
         /// canonical hyphenated "D" form so the wire representation stays
         /// stable regardless of the input format.
         /// </summary>
@@ -199,12 +199,12 @@ namespace MTConnect.Tests.Common.Agents
 
         /// <summary>
         /// <see cref="DeterministicAgentUuid.TryValidate"/> accepts uppercase
-        /// hex characters (case-insensitive per RFC 4122) and normalises the
+        /// hex characters (case-insensitive per RFC 4122) and normalizes the
         /// output to lowercase so the wire representation is stable regardless
         /// of the operator's typing.
         /// </summary>
         [Test]
-        public void TryValidate_uppercase_hex_is_normalised_to_lowercase()
+        public void TryValidate_uppercase_hex_is_normalized_to_lowercase()
         {
             const string Uppercased = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8";
             const string Expected   = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
@@ -615,7 +615,7 @@ namespace MTConnect.Tests.Common.Agents
         /// <summary>
         /// The <c>warn</c> parameter defaults to <see langword="null"/> —
         /// callers that omit it entirely must get the same no-throw
-        /// behaviour as an explicitly-null delegate.
+        /// behavior as an explicitly-null delegate.
         /// </summary>
         [Test]
         public void Default_warn_argument_omitted_does_not_throw()
@@ -825,20 +825,20 @@ namespace MTConnect.Tests.Common.Agents
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// <see cref="DeterministicAgentUuid.TryValidate"/> delegates to
-        /// <see cref="Guid.TryParse(string, out Guid)"/>, which trims leading
-        /// and trailing ASCII whitespace (space, tab, CR, LF). A copy-pasted
-        /// value with stray whitespace is accepted and normalised to the
-        /// canonical hyphenated "D" form. Pins that delegated contract so a
-        /// future .NET runtime tightening (or a swap to
-        /// <c>Guid.TryParseExact</c>) does not silently reject the input
-        /// class operators most commonly produce.
+        /// <see cref="DeterministicAgentUuid.TryValidate"/> trims leading and
+        /// trailing whitespace before delegating to
+        /// <see cref="Guid.TryParse(string, out Guid)"/>, so a copy-pasted
+        /// value with stray whitespace is accepted and normalized to the
+        /// canonical hyphenated "D" form. Pinning the trim locally (rather
+        /// than relying on <c>Guid.TryParse</c>'s implicit trim behaviour)
+        /// keeps the length-cap defense meaningful against padded input and
+        /// isolates the resolver from any future runtime tightening.
         /// </summary>
         [TestCase(" 6ba7b810-9dad-11d1-80b4-00c04fd430c8")]
         [TestCase("6ba7b810-9dad-11d1-80b4-00c04fd430c8 ")]
         [TestCase(" 6ba7b810-9dad-11d1-80b4-00c04fd430c8 ")]
         [TestCase("\t6ba7b810-9dad-11d1-80b4-00c04fd430c8\r\n")]
-        public void TryValidate_leading_and_trailing_whitespace_is_trimmed_and_normalised(string input)
+        public void TryValidate_leading_and_trailing_whitespace_is_trimmed_and_normalized(string input)
         {
             const string Expected = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 
@@ -852,12 +852,12 @@ namespace MTConnect.Tests.Common.Agents
 
         /// <summary>
         /// Mixed-case hex is accepted (RFC 4122 case-insensitive) and the
-        /// output is normalised to lowercase so the wire representation is
+        /// output is normalized to lowercase so the wire representation is
         /// stable regardless of how the operator typed the value. Companion
-        /// to <see cref="TryValidate_uppercase_hex_is_normalised_to_lowercase"/>.
+        /// to <see cref="TryValidate_uppercase_hex_is_normalized_to_lowercase"/>.
         /// </summary>
         [Test]
-        public void TryValidate_mixed_case_hex_is_accepted_and_normalised_to_lowercase()
+        public void TryValidate_mixed_case_hex_is_accepted_and_normalized_to_lowercase()
         {
             const string MixedCase = "6Ba7B810-9dAd-11D1-80B4-00c04Fd430c8";
             const string Expected  = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
@@ -959,6 +959,120 @@ namespace MTConnect.Tests.Common.Agents
                 "Valid override wins Path 1; persisted state is never consulted.");
             Assert.That(messages, Is.Empty,
                 "Path 1 short-circuits before the persisted-state warn arm — malformed persisted must be silent.");
+        }
+
+        // ------------------------------------------------------------------
+        // Length-cap defense — TryValidate rejects mega-payloads before
+        // invoking Guid.TryParse so a pasted-in blob can never allocate
+        // megabytes of parse state. 72 chars is the longest legal RFC 4122
+        // textual form ("X" with braces around 11 hex segments) plus slack.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// A 73-character input (one past the length cap) must be rejected
+        /// even when it contains a syntactically valid UUID prefix — the
+        /// length gate short-circuits before <c>Guid.TryParse</c> runs.
+        /// </summary>
+        [Test]
+        public void TryValidate_input_one_past_length_cap_is_rejected()
+        {
+            var overCap = new string('a', 73);
+
+            var ok = DeterministicAgentUuid.TryValidate(overCap, out var normalized);
+
+            Assert.That(ok, Is.False,
+                "73 characters exceeds the 72-char length cap — must be rejected.");
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
+        /// A mega-payload (10 KB) must be rejected instantly without
+        /// invoking <c>Guid.TryParse</c> on the whole string; the length
+        /// cap is the DoS defense that keeps the resolver O(1) on hostile
+        /// input.
+        /// </summary>
+        [Test]
+        public void TryValidate_mega_payload_is_rejected_before_parse()
+        {
+            var mega = new string('x', 10_000);
+
+            var ok = DeterministicAgentUuid.TryValidate(mega, out var normalized);
+
+            Assert.That(ok, Is.False);
+            Assert.That(normalized, Is.Null);
+        }
+
+        // ------------------------------------------------------------------
+        // Guid.Empty warn wording — the resolver's warn message must be
+        // broad enough to cover BOTH parse failure AND the RFC 4122 nil
+        // UUID (which parses fine but is rejected as a collision hazard).
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// When the operator supplies the all-zero nil UUID, the resolver
+        /// must warn with the broad "not an acceptable RFC 4122 UUID"
+        /// wording — not the narrower "unparseable" wording — because the
+        /// nil UUID DOES parse per RFC 4122 §4.1.7. Operators debugging
+        /// why their all-zero UUID was rejected should not look for a
+        /// parse failure that never happened.
+        /// </summary>
+        [Test]
+        public void Resolve_warn_on_nil_uuid_uses_broad_acceptable_wording()
+        {
+            var messages = new List<string>();
+            const string Nil = "00000000-0000-0000-0000-000000000000";
+
+            _ = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: Nil,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Contain("not an acceptable RFC 4122 UUID"),
+                "Warn must use broad 'not acceptable' wording so operators recognise nil-UUID rejection.");
+            Assert.That(messages[0], Does.Contain("nil UUID"),
+                "Warn should mention the nil-UUID rejection cause explicitly for diagnostic clarity.");
+            AssertLogSafe(messages[0]);
+        }
+
+        // ------------------------------------------------------------------
+        // Derive defensive guard — refuses to derive from an empty seed so
+        // a misconfigured caller cannot produce a fleet-wide collision UUID.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// <see cref="DeterministicAgentUuid.Derive"/> throws
+        /// <see cref="ArgumentException"/> when both <c>agentName</c> and
+        /// <c>hostname</c> are null / empty — the derived seed would be
+        /// "agent::0", hashing to a single UUID for every misconfigured
+        /// agent and defeating the entire lifetime-unique guarantee.
+        /// </summary>
+        [TestCase(null, null)]
+        [TestCase(null, "")]
+        [TestCase("", null)]
+        [TestCase("", "")]
+        public void Derive_throws_when_both_agent_name_and_hostname_are_empty(string agentName, string hostname)
+        {
+            Assert.Throws<ArgumentException>(
+                () => DeterministicAgentUuid.Derive(agentName, hostname, port: 0),
+                "Both seed components empty must not silently derive a fleet-wide collision UUID.");
+        }
+
+        /// <summary>
+        /// Non-empty <c>agentName</c> is sufficient — the null / empty
+        /// <c>hostname</c> is tolerated because <c>Environment.MachineName</c>
+        /// is never null in practice but the API surface accepts either.
+        /// </summary>
+        [TestCase("agent-name", null)]
+        [TestCase("agent-name", "")]
+        public void Derive_accepts_null_or_empty_hostname_when_agent_name_supplied(string agentName, string hostname)
+        {
+            var uuid = DeterministicAgentUuid.Derive(agentName, hostname, port: 0);
+
+            Assert.That(Guid.TryParse(uuid, out _), Is.True,
+                "Derive must succeed when agentName is non-empty even if hostname is null / empty.");
         }
 
         // ------------------------------------------------------------------

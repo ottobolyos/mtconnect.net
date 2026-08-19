@@ -67,6 +67,17 @@ namespace MTConnect.Agents
         public static string Derive(string agentName, string hostname, int port)
         {
             var nameComponent = !string.IsNullOrEmpty(agentName) ? agentName : hostname;
+            if (string.IsNullOrEmpty(nameComponent))
+            {
+                // Refuse to derive from an empty seed. If both agentName and hostname
+                // are null / empty the resulting UUID would be a fleet-wide constant
+                // ("agent::0" hashes to a single UUID for every misconfigured agent),
+                // defeating the entire lifetime-unique guarantee. Callers must
+                // supply at least one non-empty seed component.
+                throw new ArgumentException(
+                    "Both agentName and hostname were null or empty; cannot derive a deterministic Agent UUID.",
+                    nameof(hostname));
+            }
             var seed = "agent:" + nameComponent + ":" + port.ToString(CultureInfo.InvariantCulture);
             return DeriveFromSeed(seed);
         }
@@ -138,10 +149,16 @@ namespace MTConnect.Agents
         /// recognizes — hyphenated "D" (<c>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</c>),
         /// braced "B", parenthesized "P", bare-hex "N", or hex-braced "X" — and
         /// returns the canonical hyphenated "D" form so the wire representation
-        /// is stable regardless of input format. Rejects <see langword="null"/>,
-        /// empty, whitespace-only, unparseable inputs, and the all-zero
-        /// <see cref="Guid.Empty"/> value (a fleet-wide UUID collision hazard
-        /// if adopted by more than one agent).
+        /// is stable regardless of input format. Surrounding whitespace is
+        /// trimmed before parsing so a trailing newline, YAML indent, or
+        /// copy-paste padding does not silently reject an otherwise-valid UUID.
+        /// Inputs longer than 72 characters (the longest RFC 4122 textual form
+        /// plus slack) are rejected without invoking <c>Guid.TryParse</c> so a
+        /// pasted-in mega-payload cannot cost megabytes of parse state.
+        /// Rejects <see langword="null"/>, empty, whitespace-only, unparseable
+        /// inputs, over-length inputs, and the all-zero
+        /// <see cref="Guid.Empty"/> value (the RFC 4122 nil UUID — a
+        /// fleet-wide collision hazard if adopted by more than one agent).
         /// <para>
         /// Motivation: MTConnect Part 1 types the <c>uuid</c> attribute as the
         /// <c>UUID</c> DataType (RFC 4122), and requires that value to remain
@@ -174,6 +191,15 @@ namespace MTConnect.Agents
         {
             normalized = null;
             if (string.IsNullOrWhiteSpace(input)) return false;
+            // Trim surrounding whitespace so trailing newlines / YAML indent /
+            // copy-paste padding don't silently reject an otherwise-valid UUID.
+            // Guid.TryParse does not trim on its own.
+            input = input.Trim();
+            // Length cap keeps `Guid.TryParse` from allocating megabytes of
+            // parse state when the config slot receives a pasted-in payload.
+            // The longest RFC 4122 format ("X" with braces around 11 hex
+            // segments plus surrounding braces) fits in 68 chars; +4 slack.
+            if (input.Length > 72) return false;
             if (!Guid.TryParse(input, out var parsed)) return false;
             if (parsed == Guid.Empty) return false;
             normalized = parsed.ToString();
