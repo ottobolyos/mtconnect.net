@@ -299,11 +299,10 @@ namespace MTConnect.SysML.CSharp
                         //
                         // The full import-side classModels list is passed too so the
                         // walk can find parents that are present in the SysML graph but
-                        // never reach `templates` (e.g. `Assets.CuttingTools.Measurement`,
-                        // an abstract base whose .g.cs is hand-maintained / frozen and
-                        // therefore not re-emitted by any current renderer flow). The
-                        // child ToolingMeasurement still extends it at C# compile time,
-                        // so its `Code` property hides Measurement.Code and needs `new`.
+                        // never reach `templates` (e.g. abstract bases whose .g.cs is
+                        // hand-maintained / frozen and therefore not re-emitted by any
+                        // current renderer flow) — the child class still extends them at
+                        // C# compile time, so any name collision needs the `new` marker.
                         MarkInheritedProperties(templates, classModels);
 
 
@@ -490,7 +489,7 @@ namespace MTConnect.SysML.CSharp
         ///     <see cref="MTConnectClassModel.ParentName"/> through every
         ///     ClassModel the renderer has assembled. This catches the
         ///     overwhelming majority of cases (Asset.SerialNumber ⇒
-        ///     CuttingToolAsset, Measurement.Code ⇒ ToolingMeasurement, etc.).
+        ///     CuttingToolAsset, Component.Uuid ⇒ Device, etc.).
         ///   </item>
         ///   <item>
         ///     Hand-stitched seeds for inheritance links the SysML model does
