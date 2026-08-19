@@ -432,7 +432,11 @@ jobs:
   # ----------------------------------------------------------------
   create-gh-release:
     if: github.ref == 'refs/heads/master'
-    needs: [compute-version, publish-nuget, sbom, docker-manifest]
+    # `vuln-scan` is a transitive `needs` via `publish-nuget`, but
+    # naming it directly hard-fails the release cut if a future
+    # rewire lets `publish-nuget` bypass the scan (e.g. via
+    # `if:` overrides).
+    needs: [compute-version, publish-nuget, sbom, docker-manifest, vuln-scan]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -467,4 +471,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.compute-version.outputs.version }}
-        run: npx tsx tools/release/gh-release-create.ts --version "$VERSION" --docker-image "trakhound/mtconnect-agent:$VERSION"
+          # Pin the tag to the SHA that produced the artefacts. Without
+          # `--target`, `gh release create` pins the tag to the tip of
+          # `master`, which drifts under concurrent merges.
+          TARGET_SHA: ${{ github.sha }}
+        run: npx tsx tools/release/gh-release-create.ts --version "$VERSION" --docker-image "trakhound/mtconnect-agent:$VERSION" --target "$TARGET_SHA"

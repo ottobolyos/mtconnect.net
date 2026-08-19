@@ -31,18 +31,21 @@ test('parseOptions: happy path — every field populated', () => {
     '--assets', '/tmp/nupkg',
     '--assets', '/tmp/sbom',
     '--docker-image', 'foo/bar:1',
+    '--target', 'deadbeef',
   ]);
   assert.equal(o.version, '7.0.0-dev.42');
   assert.equal(o.repo, 'me/proj');
   assert.deepEqual(o.assetDirs, ['/tmp/nupkg', '/tmp/sbom']);
   assert.equal(o.dockerImage, 'foo/bar:1');
+  assert.equal(o.target, 'deadbeef');
   assert.equal(o.dryRun, false);
 });
 
-test('parseOptions: defaults — repo, assetDirs, dockerImage undefined', () => {
+test('parseOptions: defaults — repo, assetDirs, dockerImage, target undefined', () => {
   const o = parseOptions(['--version', '1.0.0']);
   assert.equal(o.repo, 'TrakHound/MTConnect.NET');
   assert.equal(o.dockerImage, undefined);
+  assert.equal(o.target, undefined);
   // assetDirs default to build/output/nupkg + build/output/sbom under
   // repo root; assert shape rather than exact paths (repo-root-dependent).
   assert.equal(o.assetDirs.length, 2);
@@ -111,6 +114,46 @@ test('collectAssets: aggregates across multiple dirs', () => {
   } finally {
     rmSync(dirA, { recursive: true, force: true });
     rmSync(dirB, { recursive: true, force: true });
+  }
+});
+
+test('collectAssets: recurses into nested subdirectories', () => {
+  // `Microsoft.Sbom.DotNetTool` writes the SBOM under
+  // `_manifest/spdx_2.2/manifest.spdx.json` — pin that shape so the
+  // nested path is guaranteed to land on the release attachment list.
+  const dir = mkdtempSync(join(tmpdir(), 'gh-release-collect-nested-'));
+  try {
+    mkdirSync(join(dir, '_manifest', 'spdx_2.2'), { recursive: true });
+    writeFileSync(join(dir, '_manifest', 'spdx_2.2', 'manifest.spdx.json'), 'x');
+    writeFileSync(join(dir, 'top.nupkg'), 'x');
+    const r = collectAssets([dir]);
+    const names = r.map((p) => p.split('/').pop()).sort();
+    assert.deepEqual(names, ['manifest.spdx.json', 'top.nupkg']);
+    // Full path of the nested manifest survives, not just the basename.
+    assert.ok(
+      r.some((p) => p.endsWith('/_manifest/spdx_2.2/manifest.spdx.json')),
+      `no nested manifest path in ${r.join(', ')}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('collectAssets: skips nested dotfiles and dot-directories', () => {
+  // A `.git` directory or a `.DS_Store` under any depth must NOT
+  // leak into the attachment list — pin so the recursive walk
+  // respects the dotfile skip at every level, not just the top.
+  const dir = mkdtempSync(join(tmpdir(), 'gh-release-collect-nested-dot-'));
+  try {
+    mkdirSync(join(dir, 'sub', '.git'), { recursive: true });
+    writeFileSync(join(dir, 'sub', '.git', 'HEAD'), 'x');
+    writeFileSync(join(dir, 'sub', '.DS_Store'), 'x');
+    writeFileSync(join(dir, 'sub', 'keep.nupkg'), 'x');
+    const r = collectAssets([dir]);
+    const basenames = r.map((p) => p.split('/').pop()).sort();
+    assert.deepEqual(basenames, ['keep.nupkg']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
