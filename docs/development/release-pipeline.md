@@ -14,17 +14,44 @@ collapses into the latest push and cancels any in-flight prior run.
 
 ## Jobs
 
-| Job | Runner | Purpose |
-| --- | --- | --- |
-| `compute-version` | `ubuntu-latest` | Runs `tools/ci/semver-bump.ts` to derive `<version>-dev.<N>` from the commit range since the last stable tag. |
-| `pack` | `ubuntu-latest` | `dotnet pack MTConnect.NET.sln -c Release`, uploads every `.nupkg` + `.snupkg` as the `nupkg` artefact. |
-| `docker-amd64` | `ubuntu-latest` | Native `linux/amd64` image via `docker buildx build`, pushed as `<image>:<version>-amd64`. |
-| `docker-arm64` | `ubuntu-24.04-arm` | Native `linux/arm64` image, pushed as `<image>:<version>-arm64`. |
-| `docker-manifest` | `ubuntu-latest` | Merges the two per-arch tags into a single multi-arch tag `<image>:<version>` via `docker buildx imagetools create`. |
-| `sbom` | `ubuntu-latest` | SPDX SBOMs — `Microsoft.Sbom.DotNetTool` over the `.nupkg` set + `anchore/sbom-action` (syft) over the merged image. |
-| `vuln-scan` | `ubuntu-latest` | `aquasecurity/trivy-action` scans the `.nupkg` set and the Docker image; SARIF uploaded to the Security tab. |
-| `publish-nuget` | `ubuntu-latest` | `dotnet nuget push` every `.nupkg` to nuget.org via `NUGET_API_KEY`. |
-| `create-gh-release` | `ubuntu-latest` | `gh release create v<version> --prerelease` with SBOMs + `.nupkg`s attached and the Docker image ref in the notes. |
+| Job | Runner | `needs:` | Purpose |
+| --- | --- | --- | --- |
+| `compute-version` | `ubuntu-latest` | — | Runs `tools/ci/semver-bump.ts` to derive `<version>-dev.<N>` from the commit range since the last stable tag. |
+| `pack` | `ubuntu-latest` | `compute-version` | `dotnet pack MTConnect.NET.sln -c Release`, uploads every `.nupkg` + `.snupkg` as the `nupkg` artefact. |
+| `docker-amd64` | `ubuntu-latest` | `compute-version` | Native `linux/amd64` image via `docker buildx build`, pushed as `<image>:<version>-amd64`. |
+| `docker-arm64` | `ubuntu-24.04-arm` | `compute-version` | Native `linux/arm64` image, pushed as `<image>:<version>-arm64`. |
+| `docker-manifest` | `ubuntu-latest` | `compute-version`, `docker-amd64`, `docker-arm64` | Merges the two per-arch tags into a single multi-arch tag `<image>:<version>` via `docker buildx imagetools create`. |
+| `sbom` | `ubuntu-latest` | `compute-version`, `pack`, `docker-manifest` | SPDX SBOMs — `Microsoft.Sbom.DotNetTool` over the `.nupkg` set + `anchore/sbom-action` (syft) over the merged image. |
+| `vuln-scan` | `ubuntu-latest` | `compute-version`, `pack`, `docker-manifest` | `aquasecurity/trivy-action` scans the `.nupkg` set and the Docker image; SARIF uploaded to the Security tab. |
+| `publish-nuget` | `ubuntu-latest` | `compute-version`, `pack`, `sbom`, `vuln-scan` | `dotnet nuget push` every `.nupkg` to nuget.org via `NUGET_API_KEY`. |
+| `create-gh-release` | `ubuntu-latest` | `compute-version`, `publish-nuget`, `sbom`, `docker-manifest`, `vuln-scan` | `gh release create v<version> --prerelease` with SBOMs + `.nupkg`s attached and the Docker image ref in the notes. |
+
+The same graph as a mermaid diagram:
+
+```mermaid
+graph LR
+  cv[compute-version] --> pack
+  cv --> amd[docker-amd64]
+  cv --> arm[docker-arm64]
+  amd --> man[docker-manifest]
+  arm --> man
+  cv --> man
+  pack --> sbom
+  man --> sbom
+  cv --> sbom
+  pack --> vs[vuln-scan]
+  man --> vs
+  cv --> vs
+  pack --> pn[publish-nuget]
+  sbom --> pn
+  vs --> pn
+  cv --> pn
+  pn --> gh[create-gh-release]
+  sbom --> gh
+  man --> gh
+  vs --> gh
+  cv --> gh
+```
 
 ## Semver-bump algorithm
 
@@ -48,7 +75,7 @@ collapses into the latest push and cancels any in-flight prior run.
 | Name | Used by | Notes |
 | --- | --- | --- |
 | `NUGET_API_KEY` | `publish-nuget` | Classic nuget.org API key. Phase 1 does not use OIDC; SignPath is deferred. |
-| `DOCKERHUB_USERNAME` | `docker-amd64`, `docker-arm64`, `docker-manifest`, `sbom` | Docker Hub account owning the `trakhound` namespace. |
+| `DOCKERHUB_USERNAME` | `docker-amd64`, `docker-arm64`, `docker-manifest`, `sbom`, `vuln-scan` | Docker Hub account owning the `trakhound` namespace. |
 | `DOCKERHUB_TOKEN` | as above | Personal access token scoped to `trakhound/mtconnect-agent` writes. |
 | `GITHUB_TOKEN` | `create-gh-release` | Auto-provisioned; `contents: write` scope. |
 

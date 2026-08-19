@@ -5,9 +5,10 @@ Every script under `tools/release/` is a TypeScript file executed via
 only production consumer; scripts also run standalone under
 `--dry-run` for local verification.
 
-Every script exposes a `main(argv)` export and a
+Every top-level script exposes a `main(argv)` export and a
 run-when-invoked-directly shim, so it doubles as a library and a
-CLI.
+CLI. `shell.ts` is a shared helper — it has no `main(argv)`, only
+the reusable spawn-and-log surface every other script imports.
 
 ## `pack.ts`
 
@@ -80,8 +81,25 @@ tsx tools/release/gh-release-create.ts --version 7.0.0-dev.42 \
     --docker-image trakhound/mtconnect-agent:7.0.0-dev.42
 ```
 
+## `shell.ts` — shared helper
+
+Not a CLI. Exposes:
+
+- `run(cmd, args, opts?)` — inherit-stdio `spawn` wrapper that
+  throws on non-zero exit and echoes each command it runs. Under
+  `opts.dryRun`, prints `[dry-run] <cmd>` and skips the spawn.
+- `renderCmd(cmd, args)` — human-readable rendering of the command
+  as it would appear on stdout. Redacts the value that follows any
+  `SECRET_ARG_NAMES` arg (`--api-key`, `--password`, `-p`,
+  `--token`) so a CI-log echo cannot leak a credential.
+- `parseDryRun(argv)` — pulls the `--dry-run` flag out of an argv
+  list; every CLI above uses this to preserve a uniform flag
+  surface without pulling in a heavier CLI library.
+- `requireEnv(name)` / `optionalEnv(name)` — throwing / undefined
+  variants for environment-variable lookup.
+
 ## `--dry-run`
 
-Every script accepts `--dry-run`. Under that flag every subprocess
+Every CLI accepts `--dry-run`. Under that flag every subprocess
 invocation is logged instead of executed — the shape of the pipeline
 can be verified end-to-end on a workstation without publishing.
