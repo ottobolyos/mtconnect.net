@@ -73,6 +73,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Grants MTConnect.NET-XML-Tests reach into the internal helpers (MTConnectVersion, Namespaces) that have no public equivalent. The assembly is not strong-named, so no PublicKey clause is required. -->
 		<InternalsVisibleTo Include="MTConnect.NET-XML-Tests" />
 	</ItemGroup>
 
