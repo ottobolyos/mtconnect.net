@@ -4,7 +4,7 @@
 // Pins the fix for the `MTConnectVersion.GetByNamespace` dispatch-chain
 // omission: the switch capped out at `Namespaces.Version25.Match(ns)` and
 // fell through to `return new Version()` (empty, "0.0") for any namespace
-// declared by a document newer than v2.5 - even though `Namespaces.Version26`
+// declared by a document newer than v2.5 — even though `Namespaces.Version26`
 // / `Namespaces.Version27` and `MTConnectVersions.Version26` /
 // `MTConnectVersions.Version27` both already existed. A document declaring
 // `urn:mtconnect.org:MTConnectStreams:2.7` (or `:2.6`) therefore resolved to
@@ -159,7 +159,7 @@ namespace MTConnect.Tests.XML
 
         // Regression guard for the specific bug: before the fix, a v2.7
         // namespace fell all the way through the chain (Version25 was the
-        // highest branch present) and returned `new Version()` - equal to
+        // highest branch present) and returned `new Version()` — equal to
         // "0.0", not `MTConnectVersions.Version27`.
         /// <summary>Pins that a v2.7 namespace does not fall through to an empty version.</summary>
         [Test]
@@ -275,6 +275,61 @@ namespace MTConnect.Tests.XML
             Assert.That(actual, Is.EqualTo(MTConnectVersions.Version27));
             Assert.That(actual.Major, Is.EqualTo(2));
             Assert.That(actual.Minor, Is.EqualTo(7));
+        }
+
+        /// <summary>Pins that <see cref="MTConnectVersion.Get(string)"/> rejects a document that declares a DTD — the hardened <c>Namespaces.Get</c> sets <c>DtdProcessing = Prohibit</c>, so any DOCTYPE-carrying payload (including billion-laughs entity-expansion attempts) is refused rather than parsed. Guards the XXE / entity-expansion surface introduced by <c>XmlDocument.LoadXml</c>'s historical default settings.</summary>
+        [Test]
+        public void Get_rejects_document_with_dtd_and_defaults_to_Max()
+        {
+            var xml = "<?xml version=\"1.0\"?>" +
+                      "<!DOCTYPE root [<!ELEMENT root ANY>]>" +
+                      "<root xmlns=\"urn:mtconnect.org:MTConnectStreams:2.7\" />";
+            var actual = MTConnectVersion.Get(xml);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that <see cref="MTConnectVersion.Get(string)"/> rejects a billion-laughs entity-expansion payload without parsing it — the hardened <c>Namespaces.Get</c> refuses the DOCTYPE up-front, so the exponentially-expanding entity chain never materialises. Regression guard for the XXE / entity-expansion surface.</summary>
+        [Test]
+        public void Get_rejects_billion_laughs_payload_and_defaults_to_Max()
+        {
+            var xml = "<?xml version=\"1.0\"?>" +
+                      "<!DOCTYPE lolz [" +
+                      "  <!ENTITY lol \"lol\">" +
+                      "  <!ENTITY lol2 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;\">" +
+                      "  <!ENTITY lol3 \"&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;\">" +
+                      "]>" +
+                      "<lolz>&lol3;</lolz>";
+            var actual = MTConnectVersion.Get(xml);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that <see cref="MTConnectVersion.Get(string)"/> rejects a document that references an external entity without resolving it — the hardened <c>Namespaces.Get</c> sets <c>XmlResolver = null</c>, so file:// / http:// references cannot exfiltrate host data. Regression guard for the classic XXE surface.</summary>
+        [Test]
+        public void Get_rejects_external_entity_reference_and_defaults_to_Max()
+        {
+            var xml = "<?xml version=\"1.0\"?>" +
+                      "<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>" +
+                      "<foo>&xxe;</foo>";
+            var actual = MTConnectVersion.Get(xml);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that <see cref="MTConnectVersion.Get(string)"/> returns the Max fallback on malformed input rather than propagating an <c>XmlException</c>. Guards downstream callers from having to catch XML-parse errors on every dispatch call.</summary>
+        [Test]
+        public void Get_returns_Max_on_malformed_xml()
+        {
+            var actual = MTConnectVersion.Get("<not-well-formed");
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that <see cref="MTConnectVersion.Get(string)"/> returns the Max fallback on a null or empty input rather than throwing an <c>ArgumentException</c>.</summary>
+        /// <param name="xml">The input under test.</param>
+        [TestCase(null)]
+        [TestCase("")]
+        public void Get_returns_Max_on_null_or_empty_input(string xml)
+        {
+            var actual = MTConnectVersion.Get(xml);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
         }
     }
 }
