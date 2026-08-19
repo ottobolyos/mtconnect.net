@@ -1,22 +1,31 @@
 name: deps-update
 
 # ------------------------------------------------------------------
-# Weekly bulk dependency update. Fires every Saturday at 02:00 UTC
-# (avoids the working-hours release window and clears reviewer
-# attention over the weekend). Bumps four ecosystems in one PR:
+# Weekly dependency update. Fires every Saturday at 02:00 UTC (avoids
+# the working-hours release window and clears reviewer attention over
+# the weekend). Bumps four ecosystems, split across two PR shapes:
 #
-#   - GitHub Actions plugin versions in `.github/workflows/*.yml`;
-#   - Docker base images in every Dockerfile;
-#   - npm packages under `docs/`;
-#   - NuGet packages across every `.csproj`.
+#   - GitHub Actions plugin versions in `.github/workflows/*.yml` —
+#     Renovate opens one PR per package;
+#   - Docker base images in every Dockerfile — Renovate opens one PR
+#     per base image;
+#   - npm packages under `docs/` — this workflow opens a single
+#     `chore/deps-weekly-npm-nuget` PR;
+#   - NuGet packages across every `.csproj` — same PR as npm.
 #
-# Every candidate release is filtered by a >=7-day quarantine — no
-# version younger than a week is accepted, so a poisoned publish that
-# gets yanked within the standard OSS response window is excluded
-# automatically.
+# Actions + Dockerfile bases (via Renovate) and npm packages (via
+# `npm-check-updates --cooldown`) enforce a >=7-day supply-chain
+# quarantine — no version younger than a week is accepted, so a
+# poisoned publish that gets yanked within the standard OSS response
+# window is excluded automatically. NuGet does NOT enforce the
+# quarantine: `dotnet-outdated` has no built-in age filter, so NuGet
+# bumps rely on downstream CI + review to catch a hot-published bad
+# release. Adding a NuGet quarantine is tracked as a follow-up.
 #
-# A prior deps-update PR that is still open when the workflow re-fires
-# is closed as superseded; only one deps PR is ever open at once.
+# A prior npm+NuGet PR that is still open when the workflow re-fires
+# is closed as superseded — only one bulk PR from this workflow is
+# ever open at once. Renovate's per-package PRs live under their own
+# `renovate/*` branches and follow Renovate's usual open/close rules.
 # ------------------------------------------------------------------
 
 on:
@@ -38,7 +47,10 @@ env:
   # Minimum age (days) a release must have before it is eligible for
   # inclusion. Increase to widen the quarantine.
   MIN_AGE_DAYS: '7'
-  BRANCH_NAME: chore/deps-weekly-update
+  # Branch that holds the npm + NuGet bulk bump. Renovate opens its
+  # own per-package branches under `renovate/*` for GH Actions +
+  # Dockerfile bases and manages them independently.
+  BRANCH_NAME: chore/deps-weekly-npm-nuget
 
 jobs:
   bump:
@@ -66,15 +78,16 @@ jobs:
             8.0.x
             9.0.x
 
-      - name: Close prior deps PR if still open
+      - name: Close prior npm+NuGet deps PR if still open
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH_NAME: ${{ env.BRANCH_NAME }}
         run: |
           set -euo pipefail
-          # Enumerate open PRs targeting the deps branch — expected 0 or 1.
-          # Close each as "superseded"; the fresh branch push below opens
-          # the replacement.
+          # Enumerate open PRs targeting this workflow's own bulk branch —
+          # expected 0 or 1. Renovate's per-package PRs live on their own
+          # `renovate/*` branches and are NOT touched here. Close each as
+          # "superseded"; the fresh branch push below opens the replacement.
           for n in $(gh pr list --state open --head "$BRANCH_NAME" --json number --jq '.[].number'); do
             gh pr close "$n" --comment "Superseded by the next weekly deps run."
           done
@@ -89,43 +102,46 @@ jobs:
           git checkout -B "$BRANCH_NAME" origin/master
 
       # ------------------------------------------------------------
-      # 1) GitHub Actions plugin versions.
+      # 1) GitHub Actions plugin versions AND Dockerfile base images.
+      #    Renovate handles both managers from the same config file
+      #    and opens one PR per package on its own `renovate/*`
+      #    branches — this step's output is out-of-band from the
+      #    npm + NuGet bulk PR that follows.
       # ------------------------------------------------------------
-      - name: Bump GitHub Actions pins
+      - name: Bump GitHub Actions + Dockerfile bases (via Renovate)
         uses: renovatebot/github-action@85b17ebd5abf43d1c34c01bd4c8dbb8d45bbc2c7  # v43.0.7
         with:
           configurationFile: .github/renovate-actions-only.json
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # ------------------------------------------------------------
-      # 2) Docker base images. Renovate covers Dockerfile FROM lines
-      #    via its `docker` manager, driven by the same config file.
-      # ------------------------------------------------------------
-      - name: Bump Docker base images (bundled with the Renovate run)
-        run: 'echo "Handled by the Renovate step above via the docker manager."'
-
-      # ------------------------------------------------------------
-      # 3) npm packages under docs/.
+      # 2) npm packages under docs/.
       # ------------------------------------------------------------
       - name: Bump npm deps under docs/
         working-directory: docs
+        env:
+          MIN_AGE_DAYS: ${{ env.MIN_AGE_DAYS }}
         run: |
           set -euo pipefail
-          # `npm-check-updates` respects the MIN_AGE_DAYS filter (npm
-          # publish timestamps are queried via the registry).
-          npx --yes npm-check-updates@^17 --upgrade --minimal --enginesNode --target minor
+          # `npm-check-updates --cooldown <n>` (added in v18) rejects any
+          # candidate release whose publish timestamp on the npm
+          # registry is younger than <n> days. Pins npm to the same
+          # supply-chain quarantine Renovate enforces on GH-Actions +
+          # Dockerfile bases.
+          npx --yes npm-check-updates@^18 --upgrade --minimal --enginesNode --target minor --cooldown "$MIN_AGE_DAYS"
           # Fall back to package-lock refresh so the diff round-trips.
           npm install --package-lock-only
 
       # ------------------------------------------------------------
-      # 4) NuGet packages across every .csproj. `dotnet-outdated-tool`
+      # 3) NuGet packages across every .csproj. `dotnet-outdated-tool`
       #    walks the whole solution and rewrites the version pins in
-      #    place; the >=7-day filter is applied by parsing package
-      #    metadata via `dotnet nuget list source` + `nuget.org` REST.
+      #    place. `dotnet-outdated` has NO built-in age filter, so
+      #    NuGet bumps do NOT participate in the MIN_AGE_DAYS
+      #    quarantine — downstream CI + reviewer eyes are the only
+      #    protection against a hot-published bad release. Adding a
+      #    proper quarantine is tracked as a follow-up.
       # ------------------------------------------------------------
       - name: Bump NuGet package versions
-        env:
-          MIN_AGE_DAYS: ${{ env.MIN_AGE_DAYS }}
         run: |
           set -euo pipefail
           dotnet tool install --global dotnet-outdated-tool
@@ -133,7 +149,8 @@ jobs:
           export PATH="$PATH:$HOME/.dotnet/tools"
           # `--upgrade` rewrites .csproj files in place with the newest
           # eligible version subject to the pre-release filter (dev
-          # pre-releases are excluded — stable only).
+          # pre-releases are excluded — stable only). No age filter is
+          # applied; see the comment above the step.
           dotnet outdated --upgrade --pre-release Never MTConnect.NET.sln
 
       - name: Commit + push if any changes
@@ -146,7 +163,7 @@ jobs:
             exit 0
           fi
           git add -A
-          git commit -m "chore(deps): weekly bulk update"
+          git commit -m "chore(deps): weekly npm+nuget bulk update"
           git push --set-upstream origin "$BRANCH_NAME" --force-with-lease
 
       - name: Open PR
@@ -155,16 +172,17 @@ jobs:
           BRANCH_NAME: ${{ env.BRANCH_NAME }}
         run: |
           set -euo pipefail
-          # `--fill` uses the last commit's subject as the PR title, which
-          # is exactly `chore(deps): weekly bulk update`.
-          BODY="Automated weekly bulk update."
-          BODY="$BODY Every candidate release passed the"
-          BODY="$BODY ${MIN_AGE_DAYS}-day supply-chain quarantine."
+          BODY="Automated weekly bulk update for npm (docs/) + NuGet"
+          BODY="$BODY (all .csproj). GH Actions + Dockerfile bumps ship"
+          BODY="$BODY as separate per-package Renovate PRs."
+          BODY="$BODY npm candidates passed the ${MIN_AGE_DAYS}-day"
+          BODY="$BODY supply-chain quarantine via ncu --cooldown; NuGet"
+          BODY="$BODY bumps have no age filter (dotnet-outdated lacks one)."
           BODY="$BODY Auto-merge is enabled — a green CI run merges"
           BODY="$BODY without maintainer action."
           if ! gh pr view "$BRANCH_NAME" --json number >/dev/null 2>&1; then
             gh pr create \
-              --title "chore(deps): weekly bulk update" \
+              --title "chore(deps): weekly npm+nuget bulk update" \
               --body "$BODY" \
               --base master \
               --head "$BRANCH_NAME"
