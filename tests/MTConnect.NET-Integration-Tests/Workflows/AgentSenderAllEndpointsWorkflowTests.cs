@@ -30,9 +30,14 @@ namespace MTConnect.Tests.Integration.Workflows
     /// into every one of them without special-casing per endpoint.
     /// </summary>
     /// <remarks>
-    /// A shared fixture boots the agent + HTTP server once per test class
-    /// and re-uses them across the four endpoint assertions, keeping the
-    /// end-to-end pinning cheap under the RequiresDocker / E2E category.
+    /// xUnit v2 instantiates the test class once per test method, so the
+    /// broker + HTTP server are constructed and torn down per test — no
+    /// <see cref="IClassFixture{T}"/> is wired here because the assertions
+    /// span five independent endpoints (Probe, Current, Sample, Assets,
+    /// SingleAsset) that each want a fresh in-process broker to avoid
+    /// cross-test broker-state bleed. The class is tagged E2E
+    /// (in-process HTTP only, no Docker) so the CI selector filters it
+    /// alongside the other in-process end-to-end fixtures.
     /// </remarks>
     [Trait("Category", "E2E")]
     public sealed class AgentSenderAllEndpointsWorkflowTests : IDisposable
