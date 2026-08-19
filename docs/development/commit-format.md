@@ -22,8 +22,17 @@ place.
   `refactor`, `perf`, `test`, `build`, `ci`, `revert`.
 - `<scope>` — optional, but if present must be one of the pinned
   scopes below.
-- `<subject>` — imperative, ≤70 characters. Sentence-cased, no
-  trailing full stop.
+- `<subject>` — imperative, sentence-cased, no trailing full stop.
+- The header (type + scope + subject, including the punctuation) is
+  capped at 70 characters by `commitlint`'s `header-max-length` rule.
+  The rule measures the whole first line, not just the subject — a
+  long scope eats into the subject budget.
+- The body and each footer must be separated from the header (and
+  from each other) by one blank line — `commitlint` enforces
+  `body-leading-blank` and `footer-leading-blank`. Body and footer
+  lines have no formal length cap in the config today; keep them at
+  the Conventional-Commits recommended 100-character wrap for
+  readability on `git log --oneline`-adjacent tooling.
 - A `!` before the colon (`feat!:`, `fix(scope)!:`) marks a breaking
   change and triggers a major-version bump in the release pipeline.
 - A `BREAKING CHANGE:` footer has the same effect.
