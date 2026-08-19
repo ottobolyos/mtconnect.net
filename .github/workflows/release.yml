@@ -297,10 +297,20 @@ jobs:
           VERSION: ${{ needs.compute-version.outputs.version }}
         run: docker pull "trakhound/mtconnect-agent:$VERSION"
 
-      - name: Generate Docker SBOM
-        env:
-          VERSION: ${{ needs.compute-version.outputs.version }}
-        run: npx tsx tools/release/sbom.ts --docker "trakhound/mtconnect-agent:$VERSION"
+      # `anchore/sbom-action` wraps syft, the SBOM engine `sbom.ts` also
+      # invokes for its local `--dry-run` path — same tool, same SPDX
+      # shape whether run in CI or by a developer verifying the pipeline
+      # on a workstation. Writes to `build/output/sbom/`, colocated with
+      # the .nupkg SBOM the preceding step produced.
+      - name: Generate Docker SBOM (anchore/syft)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        with:
+          image: trakhound/mtconnect-agent:${{ needs.compute-version.outputs.version }}
+          format: spdx-json
+          artifact-name: docker-image.spdx.json
+          output-file: build/output/sbom/docker-image.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
 
       - name: Upload SBOMs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4

@@ -98,13 +98,14 @@ export const main = async (argv: string[]): Promise<void> => {
     '--tag',
     tag,
     '--load',
-    // Emit provenance + SBOM metadata inside the OCI image; the
-    // downstream `sbom.ts` step reads them back out via
-    // `docker buildx imagetools inspect`.
-    '--provenance',
-    'mode=max',
-    '--sbom',
-    'true',
+    // NOTE: `--provenance` and `--sbom` are deliberately NOT passed
+    // here. `buildx build --load` on the default `docker` driver
+    // silently strips both flags (the docker-in-docker image loader
+    // only knows how to import a single-platform image manifest, not
+    // an image index). The downstream `sbom` job in `release.yml`
+    // generates a fresh SPDX SBOM from the pushed image via
+    // `sbom.ts`, so the metadata surface is preserved without paying
+    // the buildx-strip warning noise on every run.
     repoRoot,
   ];
   await run('docker', args, { dryRun: opts.dryRun, cwd: repoRoot });

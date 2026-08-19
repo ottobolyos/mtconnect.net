@@ -1,8 +1,8 @@
 #!/usr/bin/env -S npx tsx
 /**
  * Unit tests for the pure helpers exported by `sbom.ts`. The
- * `dotnet sbom-tool` and `docker scout sbom` shell-outs are out of
- * scope for a pure-unit suite. Run with:
+ * `dotnet sbom-tool` and `syft` shell-outs are out of scope for a
+ * pure-unit suite. Run with:
  *
  *   tsx tools/release/sbom.test.ts
  */
