@@ -29,7 +29,7 @@ const repoRoot = resolve(new URL('../../', import.meta.url).pathname);
 /** CLI options parsed via `node:util.parseArgs`. `output` defaults to
  *  `<repo>/build/output/nupkg` so per-version outputs are colocated
  *  with the existing Builder layout. */
-type Options = {
+export type Options = {
   version: string;
   output: string;
   dryRun: boolean;
@@ -37,7 +37,7 @@ type Options = {
 
 /** Parse argv into strongly-typed `Options`. Fails fast on missing
  *  `--version`; no other flag is required. */
-const parseOptions = (argv: string[]): Options => {
+export const parseOptions = (argv: string[]): Options => {
   const { dryRun, rest } = parseDryRun(argv);
   const { values } = parseArgs({
     args: rest,

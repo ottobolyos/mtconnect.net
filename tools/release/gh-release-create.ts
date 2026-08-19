@@ -34,7 +34,7 @@ import { parseDryRun, run } from './shell.ts';
 const repoRoot = resolve(new URL('../../', import.meta.url).pathname);
 
 /** CLI options. */
-type Options = {
+export type Options = {
   version: string;
   repo: string;
   assetDirs: string[];
@@ -46,7 +46,7 @@ type Options = {
  *  accumulate into a list; missing dirs are skipped with a warning
  *  (a workflow may pass both `nupkg/` and `sbom/` even when only one
  *  step ran). */
-const parseOptions = (argv: string[]): Options => {
+export const parseOptions = (argv: string[]): Options => {
   const { dryRun, rest } = parseDryRun(argv);
   const { values } = parseArgs({
     args: rest,
@@ -76,7 +76,7 @@ const parseOptions = (argv: string[]): Options => {
 /** Enumerate assets across the requested directories, returning
  *  absolute paths. Recurses one level so `sbom/*.spdx.json` and
  *  `nupkg/*.nupkg` are both picked up without special-casing. */
-const collectAssets = (dirs: string[]): string[] => {
+export const collectAssets = (dirs: string[]): string[] => {
   const files: string[] = [];
   for (const dir of dirs) {
     if (!existsSync(dir)) {
@@ -96,7 +96,7 @@ const collectAssets = (dirs: string[]): string[] => {
  *  human-readable manifest of every attached asset and the docker
  *  image reference. Kept plain-markdown so the GitHub release page
  *  renders it without extension conversions. */
-const renderReleaseNotes = (
+export const renderReleaseNotes = (
   version: string,
   assets: string[],
   dockerImage: string | undefined,

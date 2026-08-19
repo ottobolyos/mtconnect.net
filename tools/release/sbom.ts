@@ -28,7 +28,7 @@ const repoRoot = resolve(new URL('../../', import.meta.url).pathname);
 
 /** CLI options — `nuget` and `docker` are mutually exclusive top-level
  *  modes. Exactly one must be provided. */
-type Options = {
+export type Options = {
   mode: 'nuget' | 'docker';
   input: string;
   output: string;
@@ -37,7 +37,7 @@ type Options = {
 };
 
 /** Parse argv into strongly-typed `Options`. */
-const parseOptions = (argv: string[]): Options => {
+export const parseOptions = (argv: string[]): Options => {
   const { dryRun, rest } = parseDryRun(argv);
   const { values } = parseArgs({
     args: rest,

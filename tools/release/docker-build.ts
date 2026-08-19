@@ -32,12 +32,12 @@ const repoRoot = resolve(new URL('../../', import.meta.url).pathname);
 type Platform = 'linux/amd64' | 'linux/arm64';
 
 /** Map platform to the arch-suffix used in the per-arch tag. */
-const archSuffixFor = (p: Platform): 'amd64' | 'arm64' => {
+export const archSuffixFor = (p: Platform): 'amd64' | 'arm64' => {
   return p === 'linux/amd64' ? 'amd64' : 'arm64';
 };
 
 /** CLI options. */
-type Options = {
+export type Options = {
   version: string;
   platform: Platform;
   image: string;
@@ -45,7 +45,7 @@ type Options = {
 };
 
 /** Parse argv into strongly-typed `Options`. */
-const parseOptions = (argv: string[]): Options => {
+export const parseOptions = (argv: string[]): Options => {
   const { dryRun, rest } = parseDryRun(argv);
   const { values } = parseArgs({
     args: rest,

@@ -24,7 +24,7 @@ import { optionalEnv, parseDryRun, run } from './shell.ts';
 const repoRoot = resolve(new URL('../../', import.meta.url).pathname);
 
 /** CLI options. */
-type Options = {
+export type Options = {
   input: string;
   source: string;
   apiKey: string | undefined;
@@ -32,7 +32,7 @@ type Options = {
 };
 
 /** Parse argv into strongly-typed `Options`. */
-const parseOptions = (argv: string[]): Options => {
+export const parseOptions = (argv: string[]): Options => {
   const { dryRun, rest } = parseDryRun(argv);
   const { values } = parseArgs({
     args: rest,
