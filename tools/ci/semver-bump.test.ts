@@ -62,10 +62,69 @@ test('bumpKindFor: chore/docs/build → patch', () => {
   assert.equal(bumpKindFor('build(ci): tweak workflow', ''), 'patch');
 });
 
+test('bumpKindFor: every documented patch type resolves to patch', () => {
+  // Doc lists `fix|chore|docs|style|refactor|perf|test|build|ci|revert`;
+  // pin every arm so a docstring drift or regex tweak surfaces as a
+  // failure rather than a silently-lost bump kind.
+  for (const type of ['refactor', 'style', 'perf', 'test', 'ci', 'revert']) {
+    assert.equal(bumpKindFor(`${type}: do the thing`, ''), 'patch', type);
+    assert.equal(bumpKindFor(`${type}(scope): do the thing`, ''), 'patch', `${type}(scope)`);
+  }
+});
+
+test('bumpKindFor: unknown conventional-shaped type → none', () => {
+  // `foo:` matches the type regex but is not in the known-types set,
+  // so it falls through to `none`. Distinguishes the "no match" arm
+  // from the "matched but unknown" arm — both return `none` but via
+  // different code paths.
+  assert.equal(bumpKindFor('foo: bar', ''), 'none');
+  assert.equal(bumpKindFor('wip(scope): thing', ''), 'none');
+});
+
+test('bumpKindFor: case-insensitive type recognition', () => {
+  // Docstring: "subject starts with `feat` (case-insensitive) → minor".
+  // The `type.toLowerCase()` branch is only exercised end-to-end when
+  // the input arrives mixed-case; pin the contract.
+  assert.equal(bumpKindFor('FEAT: shout', ''), 'minor');
+  assert.equal(bumpKindFor('Feat(agent): pascal', ''), 'minor');
+  assert.equal(bumpKindFor('FIX: shout', ''), 'patch');
+  assert.equal(bumpKindFor('Fix(agent): pascal', ''), 'patch');
+  // Bang also — the `[a-zA-Z]+` character class covers both cases.
+  assert.equal(bumpKindFor('FEAT!: shout', ''), 'major');
+  assert.equal(bumpKindFor('Fix(agent)!: pascal', ''), 'major');
+});
+
+test('bumpKindFor: BREAKING CHANGE detection covers each anchor', () => {
+  // The regex `(^|\n)BREAKING[ -]CHANGE:` has two anchors — start-of-
+  // body and post-newline. The existing test only hits the start-of-
+  // body arm; pin the newline arm too.
+  assert.equal(
+    bumpKindFor('feat: add', 'Some prose paragraph.\n\nBREAKING CHANGE: renamed field'),
+    'major',
+  );
+  assert.equal(
+    bumpKindFor('feat: add', 'Prose\nBREAKING-CHANGE: renamed'),
+    'major',
+  );
+  // Case-insensitivity on the footer marker (per `/i` flag).
+  assert.equal(
+    bumpKindFor('feat: add', 'breaking change: lowercased'),
+    'major',
+  );
+  // A `BREAKING CHANGE` mid-word (no leading anchor) must NOT trigger.
+  assert.equal(
+    bumpKindFor('feat: add', 'This is not-a-BREAKING CHANGE: really'),
+    'minor',
+  );
+});
+
 test('bumpKindFor: non-conventional → none', () => {
   assert.equal(bumpKindFor('WIP', ''), 'none');
   assert.equal(bumpKindFor('add stuff', ''), 'none');
   assert.equal(bumpKindFor('Merge branch xyz', ''), 'none');
+  // Empty subject — the trim collapses it, no type match, `none`.
+  assert.equal(bumpKindFor('', ''), 'none');
+  assert.equal(bumpKindFor('   ', ''), 'none');
 });
 
 // ─── aggregateBump ──────────────────────────────────────────────
@@ -83,6 +142,14 @@ test('aggregateBump: patch beats none only', () => {
 
 test('aggregateBump: empty → none', () => {
   assert.equal(aggregateBump([]), 'none');
+});
+
+test('aggregateBump: all-none → none (fall-through arm)', () => {
+  // Distinct from the empty case: exercises the trailing `return 'none'`
+  // after every `includes(...)` check misses. A single `none` and a
+  // list of `none`s must both fall through.
+  assert.equal(aggregateBump(['none']), 'none');
+  assert.equal(aggregateBump(['none', 'none', 'none']), 'none');
 });
 
 // ─── applyBump ──────────────────────────────────────────────────
@@ -105,6 +172,20 @@ test('applyBump: none → patch bump (avoids version collision)', () => {
 
 test('applyBump: rejects invalid base', () => {
   assert.throws(() => applyBump('nope', 'minor'), /not a valid semver/);
+  // Also rejects an empty string and a v-prefix-only string.
+  assert.throws(() => applyBump('', 'minor'), /not a valid semver/);
+  assert.throws(() => applyBump('v', 'minor'), /not a valid semver/);
+});
+
+test('applyBump: strips v-prefix for every kind', () => {
+  // The `v` strip is a single line but each kind arm consumes the
+  // stripped value differently. Pin every kind × prefix combination.
+  assert.equal(applyBump('v6.6.0', 'minor'), '6.7.0');
+  assert.equal(applyBump('6.6.0', 'minor'), '6.7.0');
+  assert.equal(applyBump('v6.6.0', 'patch'), '6.6.1');
+  assert.equal(applyBump('6.6.0', 'patch'), '6.6.1');
+  assert.equal(applyBump('v6.6.0', 'none'), '6.6.1');
+  assert.equal(applyBump('6.6.0', 'none'), '6.6.1');
 });
 
 // ─── isStableCutMarker ──────────────────────────────────────────
@@ -124,6 +205,32 @@ test('isStableCutMarker: other chore(release) messages rejected', () => {
   assert.equal(isStableCutMarker('chore: publish new stable'), false);
 });
 
+test('isStableCutMarker: whitespace-trimmed', () => {
+  // Docstring: "Case-sensitive on the marker itself". Trim behaviour
+  // is implicit via `subject.trim()` — pin so a future refactor that
+  // drops the trim does not silently break real squash-merge subjects.
+  assert.equal(isStableCutMarker('  chore(release): publish new stable\n'), true);
+  assert.equal(isStableCutMarker('\tchore(release): publish new stable (#42)\t'), true);
+});
+
+test('isStableCutMarker: case-sensitivity on the marker literal', () => {
+  // Docstring: "Case-sensitive on the marker itself so a random
+  // `chore(release): tweak wording` does not reset the counter."
+  assert.equal(isStableCutMarker('Chore(release): publish new stable'), false);
+  assert.equal(isStableCutMarker('chore(Release): publish new stable'), false);
+  assert.equal(isStableCutMarker('chore(release): Publish new stable'), false);
+});
+
+test('isStableCutMarker: PR suffix must be well-formed', () => {
+  // A `(#` opener without a digit sequence must not match, and a `#`
+  // without digits after the space likewise. Guards the `(#\d+)?`
+  // arm from over-liberal matching.
+  assert.equal(isStableCutMarker('chore(release): publish new stable (#)'), false);
+  assert.equal(isStableCutMarker('chore(release): publish new stable (#abc)'), false);
+  assert.equal(isStableCutMarker('chore(release): publish new stable (123)'), false);
+  assert.equal(isStableCutMarker('chore(release): publish new stable#123'), false);
+});
+
 // ─── isDevTag ───────────────────────────────────────────────────
 test('isDevTag: accepts vX.Y.Z-dev.N', () => {
   assert.equal(isDevTag('v6.6.0-dev.42'), true);
@@ -134,6 +241,31 @@ test('isDevTag: rejects stable + rc tags', () => {
   assert.equal(isDevTag('v6.6.0'), false);
   assert.equal(isDevTag('v6.6.0-rc.1'), false);
   assert.equal(isDevTag('v6.6.0-dev.1.2'), false);
+});
+
+test('isDevTag: rejects malformed dev-adjacent shapes', () => {
+  // Boundary cases that look almost right but must not match:
+  //  - missing counter (`-dev`);
+  //  - trailing separator (`-dev.`);
+  //  - non-numeric counter (`-dev.rc`);
+  //  - missing `v` prefix (`6.6.0-dev.1`);
+  //  - extra prefix (`vv6.6.0-dev.1`);
+  //  - leading whitespace (regex is anchored, no `.trim()`).
+  assert.equal(isDevTag('v6.6.0-dev'), false);
+  assert.equal(isDevTag('v6.6.0-dev.'), false);
+  assert.equal(isDevTag('v6.6.0-dev.rc'), false);
+  assert.equal(isDevTag('6.6.0-dev.1'), false);
+  assert.equal(isDevTag('vv6.6.0-dev.1'), false);
+  assert.equal(isDevTag(' v6.6.0-dev.1'), false);
+  assert.equal(isDevTag(''), false);
+});
+
+test('isDevTag: accepts zero counter', () => {
+  // The regex allows `\d+` including a leading zero — pin the boundary
+  // so a future author does not narrow it accidentally.
+  assert.equal(isDevTag('v6.6.0-dev.0'), true);
+  assert.equal(isDevTag('v0.0.0-dev.1'), true);
+  assert.equal(isDevTag('v10.20.30-dev.400'), true);
 });
 
 process.stdout.write(`\n${passed} assertions passed.\n`);
