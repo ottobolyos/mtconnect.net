@@ -118,7 +118,7 @@ namespace MTConnect.Tests.Common.Agents
         public void AgentUuid_set_in_config_takes_precedence_over_state_file()
         {
             const string FromStateFileUuid = "22222222-2222-4222-8222-222222222222";
-            const string FromConfigUuid    = "33333333-3333-4333-8333-333333333333";
+            const string FromConfigUuid = "33333333-3333-4333-8333-333333333333";
 
             // Pre-write the state file with a stale (but valid) UUID.
             var preexisting = new MTConnectAgentInformation(FromStateFileUuid);

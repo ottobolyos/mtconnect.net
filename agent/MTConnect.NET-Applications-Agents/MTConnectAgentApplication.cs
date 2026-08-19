@@ -573,7 +573,6 @@ namespace MTConnect.Applications
                     }
                 }
 
-
                 // Initilialize Processors
                 _processors = new MTConnectAgentProcessors(configuration);
                 _processors.ProcessorLoaded += ProcessorLoaded;

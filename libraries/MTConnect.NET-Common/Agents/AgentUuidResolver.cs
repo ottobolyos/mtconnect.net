@@ -2,6 +2,7 @@
 // TrakHound Inc. licenses this file to you under the MIT license.
 
 using System;
+using System.Globalization;
 
 namespace MTConnect.Agents
 {
@@ -46,23 +47,19 @@ namespace MTConnect.Agents
     /// </list>
     ///
     /// <para>
-    /// Spec rationale — MTConnect Part 1 types the <c>uuid</c> attribute as the
-    /// <c>UUID</c> DataType (RFC 4122). Silently forwarding a non-UUID string
-    /// (from any source) breaks XSD validation on every typed enum/decimal
-    /// DataItem and diverges from the cppagent reference implementation, which
-    /// rejects malformed input at ingress.
+    /// Spec rationale — MTConnect Part 1 types the <c>uuid</c> attribute as
+    /// the <c>UUID</c> DataType (RFC 4122) and mandates that value remain
+    /// stable and unique for the agent's entire lifetime. Silently forwarding
+    /// a non-UUID string from any source diverges from that prose contract and
+    /// from the cppagent reference implementation, which rejects malformed
+    /// input at ingress; the current wire XSD types <c>uuid</c> only as
+    /// <c>xs:string</c>, so validation would silently pass a non-UUID value,
+    /// but downstream consumers that trust the DataType annotation would then
+    /// mis-key their aggregation and history stores.
     /// </para>
     /// </summary>
     public static class AgentUuidResolver
     {
-        /// <summary>
-        /// Maximum length of an <c>AgentUuid</c> value echoed to the warning
-        /// log. Valid UUIDs are 32–38 characters; anything longer is almost
-        /// certainly a paste-in-wrong-field mistake (e.g. an API key) whose
-        /// full value should not persist in log archives.
-        /// </summary>
-        private const int LogValueMaxLength = 64;
-
         /// <summary>
         /// Resolves the Agent meta-device UUID per the three-path algorithm.
         /// </summary>
@@ -93,10 +90,12 @@ namespace MTConnect.Agents
         /// or Path 2 rejects malformed input. Kept as a plain
         /// <see cref="Action{T}"/> so <c>MTConnect.NET-Common</c> does not
         /// take a hard dependency on any logging framework; the caller adapts
-        /// it to NLog, Serilog, or <c>Microsoft.Extensions.Logging</c>. Raw
-        /// values echoed via this delegate are pre-sanitised (CRLF stripped,
-        /// truncated to <see cref="LogValueMaxLength"/> characters) to guard
-        /// against log-injection and secret leakage.
+        /// it to NLog, Serilog, or <c>Microsoft.Extensions.Logging</c>. The
+        /// message reports only the <c>length</c> of the rejected value — the
+        /// raw string is never echoed, so a mis-pasted API key, bearer token,
+        /// or other secret in the <c>AgentUuid</c> config slot cannot leak
+        /// into the log archive, and CR/LF or other control characters in the
+        /// rejected value cannot forge additional log lines.
         /// </param>
         /// <returns>
         /// The canonical hyphenated RFC 4122 UUID string that the agent must
@@ -115,47 +114,39 @@ namespace MTConnect.Agents
                 return normalizedOverride;
             }
 
-            // Path 1 rejected but operator supplied something → warn.
+            // Hoist Path 2 validity + normalisation so Path 1's rejection
+            // warning can label the fallback kind without a second parse of
+            // the persisted value.
+            var persistedIsValid = DeterministicAgentUuid.TryValidate(persistedUuid, out var normalizedPersisted);
+
+            // Path 1 rejected but operator supplied something → warn (length only).
             if (!string.IsNullOrEmpty(operatorSuppliedUuid))
             {
-                var fallbackKind = DeterministicAgentUuid.TryValidate(persistedUuid, out _)
-                    ? "persisted"
-                    : "derived";
+                var fallbackKind = persistedIsValid ? "persisted" : "derived";
                 warn?.Invoke(string.Format(
-                    "AgentUuid override '{0}' is not a valid RFC 4122 UUID; falling back to {1} UUID.",
-                    SanitiseForLog(operatorSuppliedUuid),
+                    CultureInfo.InvariantCulture,
+                    "AgentUuid override (length={0}) is not a valid RFC 4122 UUID; falling back to {1} UUID.",
+                    operatorSuppliedUuid.Length,
                     fallbackKind));
             }
 
             // Path 2 — validated persisted state wins over derivation.
-            if (DeterministicAgentUuid.TryValidate(persistedUuid, out var normalizedPersisted))
+            if (persistedIsValid)
             {
                 return normalizedPersisted;
             }
 
-            // Path 2 rejected but persisted state carried something → warn.
+            // Path 2 rejected but persisted state carried something → warn (length only).
             if (!string.IsNullOrEmpty(persistedUuid))
             {
-                warn?.Invoke(
-                    "Persisted AgentUuid in agent.information.json is not a valid RFC 4122 UUID; falling back to derived UUID.");
+                warn?.Invoke(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Persisted AgentUuid in agent.information.json (length={0}) is not a valid RFC 4122 UUID; falling back to derived UUID.",
+                    persistedUuid.Length));
             }
 
             // Path 3 — deterministic derivation.
             return DeterministicAgentUuid.Derive(agentName, hostname, port: 0);
-        }
-
-        /// <summary>
-        /// Strips CR/LF (log-injection guard) and truncates to
-        /// <see cref="LogValueMaxLength"/> characters (secret-leakage guard)
-        /// before echoing an operator-supplied value to the warning log.
-        /// </summary>
-        private static string SanitiseForLog(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return value;
-            var stripped = value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-            return stripped.Length > LogValueMaxLength
-                ? stripped.Substring(0, LogValueMaxLength) + "…"
-                : stripped;
         }
     }
 }

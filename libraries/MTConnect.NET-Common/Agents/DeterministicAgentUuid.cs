@@ -139,15 +139,19 @@ namespace MTConnect.Agents
         /// braced "B", parenthesized "P", bare-hex "N", or hex-braced "X" — and
         /// returns the canonical hyphenated "D" form so the wire representation
         /// is stable regardless of input format. Rejects <see langword="null"/>,
-        /// empty, whitespace-only, and unparseable inputs.
+        /// empty, whitespace-only, unparseable inputs, and the all-zero
+        /// <see cref="Guid.Empty"/> value (a fleet-wide UUID collision hazard
+        /// if adopted by more than one agent).
         /// <para>
         /// Motivation: MTConnect Part 1 types the <c>uuid</c> attribute as the
-        /// <c>UUID</c> DataType (RFC 4122). Silently forwarding a non-UUID
-        /// string emits wire content that fails XSD validation on any typed
-        /// enum/decimal DataItem and breaks parity with the cppagent reference
-        /// implementation. Callers that supply malformed input should log a
-        /// warning and fall through to persisted or derived UUIDs — the
-        /// three-path resolution in <see cref="AgentUuidResolver.Resolve"/>.
+        /// <c>UUID</c> DataType (RFC 4122), and requires that value to remain
+        /// stable and unique for the agent's entire lifetime. Silently
+        /// forwarding a non-UUID string diverges from the Part 1 prose
+        /// contract and from the cppagent reference implementation, which
+        /// rejects malformed input at ingress. Callers that supply malformed
+        /// input should log a warning and fall through to persisted or
+        /// derived UUIDs — the three-path resolution in
+        /// <see cref="AgentUuidResolver.Resolve"/>.
         /// </para>
         /// </remarks>
         /// <param name="input">
@@ -161,15 +165,17 @@ namespace MTConnect.Agents
         /// on failure.
         /// </param>
         /// <returns>
-        /// <see langword="true"/> if <paramref name="input"/> parses as an
-        /// RFC 4122 UUID; <see langword="false"/> for <see langword="null"/>,
-        /// empty, whitespace-only, or unparseable inputs.
+        /// <see langword="true"/> if <paramref name="input"/> parses as a
+        /// non-empty RFC 4122 UUID; <see langword="false"/> for
+        /// <see langword="null"/>, empty, whitespace-only, unparseable, or
+        /// all-zero (<see cref="Guid.Empty"/>) inputs.
         /// </returns>
         public static bool TryValidate(string input, out string normalized)
         {
             normalized = null;
             if (string.IsNullOrWhiteSpace(input)) return false;
             if (!Guid.TryParse(input, out var parsed)) return false;
+            if (parsed == Guid.Empty) return false;
             normalized = parsed.ToString();
             return true;
         }

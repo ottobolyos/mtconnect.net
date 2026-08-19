@@ -20,17 +20,20 @@ namespace MTConnect.Tests.Common.Agents
     ///
     /// <para>
     /// Silently forwarding a non-UUID string violates MTConnect Part 1, which
-    /// types the <c>uuid</c> attribute as the <c>UUID</c> DataType (RFC 4122
-    /// enumerated string token). Any downstream XSD-validating consumer
-    /// (cppagent parity, MQTT/JSON-cppagent transport) rejects the resulting
-    /// wire content on typed enum/decimal DataItems.
+    /// types the <c>uuid</c> attribute as the <c>UUID</c> DataType (RFC 4122)
+    /// and mandates that value remain stable and unique for the agent's entire
+    /// lifetime. The wire XSD currently types <c>uuid</c> only as
+    /// <c>xs:string</c>, so schema validation would silently accept a
+    /// malformed value; the cppagent reference implementation and every
+    /// downstream consumer that trusts the DataType annotation for aggregation
+    /// or historical keying reject the resulting wire content.
     /// </para>
     ///
     /// <para>
     /// Fixture drives <see cref="AgentUuidResolver.Resolve"/> directly — the
     /// same method <c>MTConnectAgentApplication.StartAgent</c> calls — so
     /// production and tests cannot silently diverge on branch order, guard
-    /// semantics, or normalisation output.
+    /// semantics, or normalization output.
     /// </para>
     /// </summary>
     [TestFixture]
@@ -118,6 +121,28 @@ namespace MTConnect.Tests.Common.Agents
             var ok = DeterministicAgentUuid.TryValidate(input, out var normalized);
 
             Assert.That(ok, Is.False);
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
+        /// <see cref="DeterministicAgentUuid.TryValidate"/> rejects the
+        /// all-zero <see cref="Guid.Empty"/> value across every accepted
+        /// input format — <see cref="Guid.TryParse(string, out Guid)"/> is
+        /// happy to parse "00000000-…", but adopting it as an agent's meta
+        /// UUID would collide every agent in a fleet on the same identifier,
+        /// which the RFC 4122 "unique for the resource's entire lifetime"
+        /// contract disallows.
+        /// </summary>
+        [TestCase("00000000-0000-0000-0000-000000000000")]
+        [TestCase("{00000000-0000-0000-0000-000000000000}")]
+        [TestCase("(00000000-0000-0000-0000-000000000000)")]
+        [TestCase("00000000000000000000000000000000")]
+        public void TryValidate_all_zero_guid_returns_false(string input)
+        {
+            var ok = DeterministicAgentUuid.TryValidate(input, out var normalized);
+
+            Assert.That(ok, Is.False,
+                "Guid.Empty is a fleet-collision hazard — TryValidate must reject it on every accepted format.");
             Assert.That(normalized, Is.Null);
         }
 
@@ -474,7 +499,10 @@ namespace MTConnect.Tests.Common.Agents
             Assert.That(messages, Has.Count.EqualTo(1),
                 "One warn — for the rejected operator override; the valid persisted UUID needs no warn.");
             Assert.That(messages[0], Does.Contain("AgentUuid override"));
-            Assert.That(messages[0], Does.Contain(Malformed));
+            Assert.That(messages[0], Does.Contain($"length={Malformed.Length}"),
+                "Warn reports length only — the raw value must never appear (secret-leakage guard).");
+            Assert.That(messages[0], Does.Not.Contain(Malformed),
+                "Warn must not echo the raw operator-supplied value.");
             Assert.That(messages[0], Does.Contain("falling back to persisted UUID"));
         }
 
@@ -529,9 +557,14 @@ namespace MTConnect.Tests.Common.Agents
             Assert.That(messages, Has.Count.EqualTo(2),
                 "Two rejected sources → two warns; the second must not be swallowed.");
             Assert.That(messages[0], Does.Contain("AgentUuid override"));
-            Assert.That(messages[0], Does.Contain(BadOverride));
+            Assert.That(messages[0], Does.Contain($"length={BadOverride.Length}"));
+            Assert.That(messages[0], Does.Not.Contain(BadOverride),
+                "Raw operator value must never appear in the warn message.");
             Assert.That(messages[0], Does.Contain("falling back to derived UUID"));
             Assert.That(messages[1], Does.Contain("Persisted AgentUuid"));
+            Assert.That(messages[1], Does.Contain($"length={BadPersisted.Length}"));
+            Assert.That(messages[1], Does.Not.Contain(BadPersisted),
+                "Raw persisted-state value must never appear in the warn message.");
             Assert.That(messages[1], Does.Contain("falling back to derived UUID"));
         }
 
@@ -598,95 +631,38 @@ namespace MTConnect.Tests.Common.Agents
         }
 
         // ------------------------------------------------------------------
-        // SanitiseForLog — CRLF stripping (log-injection guard) and
-        // truncation-at-boundary behaviour (secret-leakage guard). Exercised
-        // indirectly via the operator-override warn message content, which
-        // is the only route that pipes user input through the sanitiser.
+        // Redaction — the warn message reports the LENGTH of the rejected
+        // value and never echoes its raw content. This is the single guard
+        // that closes both log-injection (embedded CR/LF/U+2028/ANSI escapes
+        // cannot forge a new log line if the value never appears) and
+        // secret-leakage (a mis-pasted API key, bearer token, or password
+        // in the AgentUuid config slot cannot land in the log archive).
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// <c>SanitiseForLog</c> strips CR and LF characters from operator
-        /// input before it appears in the warn message — defends against
-        /// log-injection (forged log lines) where a hostile operator embeds
-        /// <c>\r\n</c> in the config file.
+        /// The Path 1 warn message must report the length of the rejected
+        /// operator override, must not echo any character of the raw value,
+        /// and must not contain any control character regardless of what the
+        /// operator supplied — a single redaction guard that closes both
+        /// log-injection (no CR/LF/U+2028/ANSI/control byte can appear if the
+        /// value itself is never echoed) and secret leakage (a mis-pasted
+        /// API key or bearer token in the AgentUuid slot cannot land in
+        /// archives).
         /// </summary>
-        [Test]
-        public void Warn_message_strips_CR_LF_from_operator_supplied_value()
+        [TestCase("bad-uuid\r\nFAKE-LOG-LINE-INJECTED")]
+        [TestCase("bad\rvalue")]
+        [TestCase("bad\nvalue")]
+        [TestCase("bad\u2028value")] // Unicode LINE SEPARATOR
+        [TestCase("bad\u2029value")] // Unicode PARAGRAPH SEPARATOR
+        [TestCase("bad\u0085value")] // NEL
+        [TestCase("bad\x1b[2Jvalue")] // ANSI CSI clear-screen
+        [TestCase("bad\x00value")]    // NUL
+        [TestCase("bad\tvalue")]      // TAB
+        [TestCase("ghp_abcdef0123456789abcdef0123456789abcd")] // paste-in-wrong-field secret shape
+        [TestCase("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig")]
+        public void Warn_message_never_echoes_raw_operator_value_and_reports_length(string input)
         {
             var messages = new List<string>();
-            const string Injected = "bad-uuid\r\nFAKE-LOG-LINE-INJECTED";
-
-            _ = AgentUuidResolver.Resolve(
-                operatorSuppliedUuid: Injected,
-                persistedUuid: null,
-                agentName: "test-agent",
-                hostname: "test-host",
-                warn: messages.Add);
-
-            Assert.That(messages, Has.Count.EqualTo(1));
-            Assert.That(messages[0], Does.Not.Contain("\r"));
-            Assert.That(messages[0], Does.Not.Contain("\n"));
-            Assert.That(messages[0], Does.Contain("bad-uuidFAKE-LOG-LINE-INJECTED"),
-                "CR and LF must be stripped inline — surrounding characters remain.");
-        }
-
-        /// <summary>
-        /// <c>SanitiseForLog</c> strips a lone CR (Mac Classic line-ending)
-        /// as well as CRLF pairs. Pins the guard against callers that split
-        /// on either terminator.
-        /// </summary>
-        [Test]
-        public void Warn_message_strips_lone_CR_from_operator_supplied_value()
-        {
-            var messages = new List<string>();
-            const string Injected = "bad\rvalue";
-
-            _ = AgentUuidResolver.Resolve(
-                operatorSuppliedUuid: Injected,
-                persistedUuid: null,
-                agentName: "test-agent",
-                hostname: "test-host",
-                warn: messages.Add);
-
-            Assert.That(messages, Has.Count.EqualTo(1));
-            Assert.That(messages[0], Does.Not.Contain("\r"));
-            Assert.That(messages[0], Does.Contain("badvalue"));
-        }
-
-        /// <summary>
-        /// <c>SanitiseForLog</c> strips a lone LF as well, matching the
-        /// symmetric CR treatment.
-        /// </summary>
-        [Test]
-        public void Warn_message_strips_lone_LF_from_operator_supplied_value()
-        {
-            var messages = new List<string>();
-            const string Injected = "bad\nvalue";
-
-            _ = AgentUuidResolver.Resolve(
-                operatorSuppliedUuid: Injected,
-                persistedUuid: null,
-                agentName: "test-agent",
-                hostname: "test-host",
-                warn: messages.Add);
-
-            Assert.That(messages, Has.Count.EqualTo(1));
-            Assert.That(messages[0], Does.Not.Contain("\n"));
-            Assert.That(messages[0], Does.Contain("badvalue"));
-        }
-
-        /// <summary>
-        /// <c>SanitiseForLog</c> does NOT truncate values at or below the
-        /// 64-character <c>LogValueMaxLength</c> boundary — pins the exact
-        /// boundary against off-by-one regressions on the length check.
-        /// </summary>
-        [Test]
-        public void Warn_message_does_not_truncate_at_exactly_max_length()
-        {
-            var messages = new List<string>();
-            // Exactly 64 chars, none of which is a valid UUID character
-            // pattern → guaranteed rejection by TryValidate.
-            var input = new string('z', 64);
 
             _ = AgentUuidResolver.Resolve(
                 operatorSuppliedUuid: input,
@@ -696,63 +672,63 @@ namespace MTConnect.Tests.Common.Agents
                 warn: messages.Add);
 
             Assert.That(messages, Has.Count.EqualTo(1));
-            Assert.That(messages[0], Does.Contain(input),
-                "A value at exactly the boundary must appear verbatim.");
-            Assert.That(messages[0], Does.Not.Contain("…"),
-                "No ellipsis must be appended at exactly the boundary.");
+            Assert.That(messages[0], Does.Contain("AgentUuid override"));
+            Assert.That(messages[0], Does.Contain($"length={input.Length}"),
+                "Warn must report the input length so operators can spot a length-mismatch mispaste.");
+            Assert.That(messages[0], Does.Not.Contain(input),
+                "Warn must never echo the raw operator value — closes secret-leakage.");
+            AssertLogSafe(messages[0]);
         }
 
         /// <summary>
-        /// <c>SanitiseForLog</c> truncates values longer than 64 characters
-        /// and appends a single ellipsis (…) so the operator sees the
-        /// prefix but a leaked API-key-length string is not archived in
-        /// full. Pins the 65-char over-boundary case.
+        /// The Path 2 (persisted state) warn message mirrors the Path 1
+        /// guarantees — reports length, never echoes the raw persisted
+        /// value, and contains no control characters. The persisted-state
+        /// file may carry any garbage a prior agent version wrote, so the
+        /// same redaction discipline applies.
         /// </summary>
-        [Test]
-        public void Warn_message_truncates_over_max_length_with_ellipsis()
+        [TestCase("garbage-persisted-value")]
+        [TestCase("truncated-uuid-write\rfromacrashedboot")]
+        [TestCase("ghk_secret_that_leaked_into_state_file_somehow")]
+        public void Warn_message_for_persisted_state_never_echoes_raw_value_and_reports_length(string input)
         {
             var messages = new List<string>();
-            // 65 chars, one over the boundary.
-            var input = new string('z', 65);
 
             _ = AgentUuidResolver.Resolve(
-                operatorSuppliedUuid: input,
-                persistedUuid: null,
+                operatorSuppliedUuid: null,
+                persistedUuid: input,
                 agentName: "test-agent",
                 hostname: "test-host",
                 warn: messages.Add);
 
             Assert.That(messages, Has.Count.EqualTo(1));
-            Assert.That(messages[0], Does.Contain(new string('z', 64) + "…"),
-                "The first 64 characters must be preserved and an ellipsis appended.");
-            Assert.That(messages[0], Does.Not.Contain(new string('z', 65)),
-                "The full 65-character input must NOT appear verbatim.");
+            Assert.That(messages[0], Does.Contain("Persisted AgentUuid"));
+            Assert.That(messages[0], Does.Contain($"length={input.Length}"));
+            Assert.That(messages[0], Does.Not.Contain(input),
+                "Persisted-state warn must not echo the raw file content.");
+            AssertLogSafe(messages[0]);
         }
 
         /// <summary>
-        /// <c>SanitiseForLog</c>'s truncation applies AFTER CRLF stripping —
-        /// a value whose raw length is over the boundary but whose stripped
-        /// length falls within it must NOT be truncated. Pins the compose
-        /// order of the two sanitiser steps.
+        /// Log-injection guard shared between the operator-override and
+        /// persisted-state warn assertions — every character in the message
+        /// must be either printable (>= U+0020) or a plain TAB (U+0009).
+        /// Rejects CR, LF, NEL, LINE / PARAGRAPH SEPARATOR, ANSI CSI, NUL
+        /// and every other C0 control byte, guarding against a regression
+        /// that funnels raw input back into the message.
         /// </summary>
-        [Test]
-        public void Warn_message_measures_length_after_CRLF_stripping()
+        private static void AssertLogSafe(string message)
         {
-            var messages = new List<string>();
-            // 64 z's interleaved with 10 CRLFs (raw length 84, stripped length 64).
-            var input = new string('z', 64) + "\r\n\r\n\r\n\r\n\r\n";
-
-            _ = AgentUuidResolver.Resolve(
-                operatorSuppliedUuid: input,
-                persistedUuid: null,
-                agentName: "test-agent",
-                hostname: "test-host",
-                warn: messages.Add);
-
-            Assert.That(messages, Has.Count.EqualTo(1));
-            Assert.That(messages[0], Does.Contain(new string('z', 64)));
-            Assert.That(messages[0], Does.Not.Contain("…"),
-                "Length is measured after CRLF stripping — no ellipsis needed here.");
+            foreach (var c in message)
+            {
+                Assert.That(
+                    c == '\t' || c >= ' ',
+                    Is.True,
+                    $"Warn message contains disallowed control character U+{((int)c):X4}.");
+                Assert.That(c, Is.Not.EqualTo('\u0085'), "NEL leaked into warn.");
+                Assert.That(c, Is.Not.EqualTo('\u2028'), "LINE SEPARATOR leaked into warn.");
+                Assert.That(c, Is.Not.EqualTo('\u2029'), "PARAGRAPH SEPARATOR leaked into warn.");
+            }
         }
 
         // ------------------------------------------------------------------
