@@ -60,7 +60,7 @@ jobs:
           node-version: '20'
 
       - name: Setup .NET 8.0 + 9.0
-        uses: actions/setup-dotnet@a893c5db93b64e8908c5aeee54cb0c0f2d519d1e  # v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
         with:
           dotnet-version: |
             8.0.x
@@ -92,7 +92,7 @@ jobs:
       # 1) GitHub Actions plugin versions.
       # ------------------------------------------------------------
       - name: Bump GitHub Actions pins
-        uses: renovatebot/github-action@a11a708142f8db3d33d7bfa6707a91b0e1eee06f  # v43.0.7
+        uses: renovatebot/github-action@85b17ebd5abf43d1c34c01bd4c8dbb8d45bbc2c7  # v43.0.7
         with:
           configurationFile: .github/renovate-actions-only.json
           token: ${{ secrets.GITHUB_TOKEN }}
