@@ -26,15 +26,11 @@
  *
  * A missing scope is allowed (some cross-cutting changes have no
  * single home); a scope that is not on the pinned list is rejected.
- * The `commitlint-plugin-selective-scope` plugin extends the standard
- * `scope-enum` rule with per-scope granularity — kept in place to
- * make a future per-scope constraint additive rather than a rewrite.
  */
 
 /** @type {import('@commitlint/types').UserConfig} */
 export default {
   extends: ['@commitlint/config-conventional'],
-  plugins: ['commitlint-plugin-selective-scope'],
   rules: {
     'scope-enum': [
       2,
