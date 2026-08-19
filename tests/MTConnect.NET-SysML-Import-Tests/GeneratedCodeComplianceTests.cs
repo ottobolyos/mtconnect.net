@@ -14,20 +14,26 @@ namespace MTConnect.Tests.SysMLImport
     /// Hermetic assertions over the <c>.g.cs</c> files PR 216's compliance
     /// sweep rewrote — no trailing whitespace, exactly one terminating
     /// newline, and no CR / CRLF anywhere. The compliance-swept set is
-    /// discovered dynamically via
-    /// <c>git diff --name-only --diff-filter=M upstream/master...HEAD</c>
-    /// filtered to <c>*.g.cs</c>, so the guard follows the sweep as it
-    /// grows in future follow-up passes. Legacy non-compliant files that
-    /// the sweep intentionally did NOT touch are out of scope for this
-    /// fixture and belong to a subsequent compliance PR.
+    /// discovered dynamically via a <c>git diff --name-only --diff-filter=AM
+    /// &lt;base-ref&gt;...HEAD</c> walk filtered to <c>*.g.cs</c>, so the guard
+    /// follows the sweep as it grows in future follow-up passes. Legacy
+    /// non-compliant files that the sweep intentionally did NOT touch are
+    /// out of scope for this fixture and belong to a subsequent compliance
+    /// PR.
     /// </summary>
     /// <remarks>
-    /// If the diff walker cannot be run — no <c>git</c> binary on PATH,
-    /// no <c>upstream/master</c> ref, or the test is run against a
-    /// non-repository copy of the code — the fixture is marked
-    /// <see cref="Assert.Inconclusive(string)"/> rather than failing. The
-    /// tighter guarantee holds under the normal CI path (fetch upstream,
-    /// run tests).
+    /// The base ref is resolved from a fallback chain — <c>$GITHUB_BASE_REF</c>
+    /// (set by <c>actions/checkout</c> on pull-request runs), then
+    /// <c>upstream/master</c> (developer-side convention), then
+    /// <c>origin/master</c> (hosted-CI convention), then <c>HEAD~1</c>
+    /// (last-resort single-commit walk). If none of those refs resolve —
+    /// no <c>git</c> binary on PATH, no repository at all, or a shallow
+    /// clone with only <c>HEAD</c> — the fixture is marked
+    /// <see cref="Assert.Inconclusive(string)"/> on a developer workstation
+    /// but <see cref="Assert.Fail(string)"/> under CI (detected via
+    /// <c>$CI = true</c>). Silently degrading to Inconclusive on hosted CI
+    /// would defeat the fixture's whole purpose — the compliance guarantee
+    /// has to be loud on the runner that actually gates merges.
     /// </remarks>
     [TestFixture]
     public class GeneratedCodeComplianceTests
@@ -101,9 +107,9 @@ namespace MTConnect.Tests.SysMLImport
         {
             var swept = LoadSweptGeneratedFiles();
             Assert.That(swept, Is.Not.Empty,
-                "Expected `git diff upstream/master...HEAD` to list at "
-                + "least one *.g.cs file. If empty, either the branch has "
-                + "drifted back to master or the diff walker misconfigured.");
+                "Expected the diff walker to list at least one *.g.cs "
+                + "file. If empty, either the branch has drifted back to "
+                + "the base ref or the walker misconfigured.");
         }
 
         private static IReadOnlyList<string> LoadSweptGeneratedFiles()
@@ -113,22 +119,94 @@ namespace MTConnect.Tests.SysMLImport
             var (ok, files, reason) = TryLoadSweptGeneratedFilesViaGit();
             if (!ok)
             {
-                Assert.Inconclusive(
+                var message =
                     "Cannot enumerate compliance-swept generated files "
-                    + $"via `git diff upstream/master...HEAD`: {reason}. "
-                    + "This fixture requires a working git checkout with "
-                    + "the `upstream/master` ref reachable.");
+                    + $"via `git diff <base-ref>...HEAD`: {reason}. "
+                    + "Ref fallback chain tried: "
+                    + string.Join(", ", CandidateBaseRefs());
+                if (IsRunningUnderCi())
+                {
+                    // Silently degrading to Inconclusive on the runner
+                    // that actually gates merges would defeat the whole
+                    // fixture — fail loudly instead.
+                    Assert.Fail(message
+                        + " Running under CI ($CI is set), so this is a "
+                        + "hard failure rather than an Inconclusive.");
+                }
+                else
+                {
+                    Assert.Inconclusive(message
+                        + " Not running under CI ($CI is unset), so the "
+                        + "fixture is marked Inconclusive on this "
+                        + "developer workstation.");
+                }
             }
 
             s_sweptFilesCache = files!;
             return s_sweptFilesCache;
         }
 
+        /// <summary>
+        /// The ordered ref-resolution fallback the diff walker attempts.
+        /// The first ref that resolves in-repo wins. <c>$GITHUB_BASE_REF</c>
+        /// is set by <c>actions/checkout</c> on pull-request events;
+        /// <c>upstream/*</c> is the developer-side convention (fork +
+        /// upstream remote); <c>origin/*</c> is the hosted-CI convention;
+        /// <c>HEAD~1</c> is a last-resort walk over the single previous
+        /// commit.
+        /// </summary>
+        private static IEnumerable<string> CandidateBaseRefs()
+        {
+            var githubBaseRef = System.Environment.GetEnvironmentVariable("GITHUB_BASE_REF");
+            if (!string.IsNullOrWhiteSpace(githubBaseRef))
+            {
+                // actions/checkout stores the base at `origin/<ref>`.
+                // Try the short form first; git will resolve it.
+                yield return "origin/" + githubBaseRef;
+                yield return githubBaseRef;
+            }
+            yield return "upstream/master";
+            yield return "origin/master";
+            yield return "HEAD~1";
+        }
+
+        private static bool IsRunningUnderCi()
+        {
+            var ci = System.Environment.GetEnvironmentVariable("CI");
+            if (string.IsNullOrEmpty(ci)) return false;
+            return ci.Equals("true", System.StringComparison.OrdinalIgnoreCase)
+                || ci == "1";
+        }
+
         private static (bool Ok, IReadOnlyList<string>? Files, string? Reason)
             TryLoadSweptGeneratedFilesViaGit()
         {
+            var attemptedRefs = new List<string>();
+            var lastReason = "no base ref candidates configured.";
+
+            foreach (var baseRef in CandidateBaseRefs())
+            {
+                attemptedRefs.Add(baseRef);
+                var (ok, files, reason) = RunGitDiff(baseRef);
+                if (ok) return (true, files, null);
+                lastReason = $"{baseRef}: {reason}";
+            }
+
+            return (false, null,
+                $"none of the candidate base refs resolved. Last error → {lastReason}. "
+                + $"Refs tried: {string.Join(", ", attemptedRefs)}.");
+        }
+
+        private static (bool Ok, IReadOnlyList<string>? Files, string? Reason)
+            RunGitDiff(string baseRef)
+        {
+            // `--diff-filter=AM` covers both Added and Modified paths so a
+            // regen that adds new .g.cs entries (e.g. a fresh SysML entity
+            // in a newer version) is still enforced by the compliance
+            // fixture. `--diff-filter=M` alone would silently skip Added
+            // files — a gap called out during Ultrareview.
             var psi = new ProcessStartInfo("git",
-                "diff --name-only --diff-filter=M upstream/master...HEAD")
+                $"diff --name-only --diff-filter=AM {baseRef}...HEAD")
             {
                 WorkingDirectory = s_repoRoot,
                 RedirectStandardOutput = true,
