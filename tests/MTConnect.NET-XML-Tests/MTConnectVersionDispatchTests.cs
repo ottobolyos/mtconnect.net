@@ -70,6 +70,73 @@ namespace MTConnect.Tests.XML
             yield return new TestCaseData(Namespaces.Version27.Streams, MTConnectVersions.Version27).SetName("GetByNamespace_resolves_Streams_2_7");
         }
 
+        /// <summary>Every currently-declared MTConnect namespace (Assets, Devices, Error, Streams) across every version, paired with the version it must resolve to. Pins every enum-arm of every <c>Namespaces.Version{XX}.Match</c> disjunction, not just the Devices arm.</summary>
+        /// <returns>The (namespace, expected version) pairs.</returns>
+        public static IEnumerable<TestCaseData> AllKindsAllVersions()
+        {
+            // v1.0 and v1.1: no Assets namespace declared (Match is Devices || Error || Streams).
+            yield return new TestCaseData(Namespaces.Version10.Devices, MTConnectVersions.Version10).SetName("GetByNamespace_resolves_Devices_1_0_AllKinds");
+            yield return new TestCaseData(Namespaces.Version10.Error, MTConnectVersions.Version10).SetName("GetByNamespace_resolves_Error_1_0");
+            yield return new TestCaseData(Namespaces.Version10.Streams, MTConnectVersions.Version10).SetName("GetByNamespace_resolves_Streams_1_0");
+
+            yield return new TestCaseData(Namespaces.Version11.Devices, MTConnectVersions.Version11).SetName("GetByNamespace_resolves_Devices_1_1_AllKinds");
+            yield return new TestCaseData(Namespaces.Version11.Error, MTConnectVersions.Version11).SetName("GetByNamespace_resolves_Error_1_1");
+            yield return new TestCaseData(Namespaces.Version11.Streams, MTConnectVersions.Version11).SetName("GetByNamespace_resolves_Streams_1_1");
+
+            // v1.2+ declare Assets.
+            yield return new TestCaseData(Namespaces.Version12.Assets, MTConnectVersions.Version12).SetName("GetByNamespace_resolves_Assets_1_2");
+            yield return new TestCaseData(Namespaces.Version12.Error, MTConnectVersions.Version12).SetName("GetByNamespace_resolves_Error_1_2");
+            yield return new TestCaseData(Namespaces.Version12.Streams, MTConnectVersions.Version12).SetName("GetByNamespace_resolves_Streams_1_2");
+
+            yield return new TestCaseData(Namespaces.Version13.Assets, MTConnectVersions.Version13).SetName("GetByNamespace_resolves_Assets_1_3");
+            yield return new TestCaseData(Namespaces.Version13.Error, MTConnectVersions.Version13).SetName("GetByNamespace_resolves_Error_1_3");
+            yield return new TestCaseData(Namespaces.Version13.Streams, MTConnectVersions.Version13).SetName("GetByNamespace_resolves_Streams_1_3");
+
+            yield return new TestCaseData(Namespaces.Version14.Assets, MTConnectVersions.Version14).SetName("GetByNamespace_resolves_Assets_1_4");
+            yield return new TestCaseData(Namespaces.Version14.Error, MTConnectVersions.Version14).SetName("GetByNamespace_resolves_Error_1_4");
+            yield return new TestCaseData(Namespaces.Version14.Streams, MTConnectVersions.Version14).SetName("GetByNamespace_resolves_Streams_1_4");
+
+            yield return new TestCaseData(Namespaces.Version15.Assets, MTConnectVersions.Version15).SetName("GetByNamespace_resolves_Assets_1_5");
+            yield return new TestCaseData(Namespaces.Version15.Error, MTConnectVersions.Version15).SetName("GetByNamespace_resolves_Error_1_5");
+            yield return new TestCaseData(Namespaces.Version15.Streams, MTConnectVersions.Version15).SetName("GetByNamespace_resolves_Streams_1_5");
+
+            yield return new TestCaseData(Namespaces.Version16.Assets, MTConnectVersions.Version16).SetName("GetByNamespace_resolves_Assets_1_6");
+            yield return new TestCaseData(Namespaces.Version16.Error, MTConnectVersions.Version16).SetName("GetByNamespace_resolves_Error_1_6");
+            yield return new TestCaseData(Namespaces.Version16.Streams, MTConnectVersions.Version16).SetName("GetByNamespace_resolves_Streams_1_6");
+
+            yield return new TestCaseData(Namespaces.Version17.Assets, MTConnectVersions.Version17).SetName("GetByNamespace_resolves_Assets_1_7");
+            yield return new TestCaseData(Namespaces.Version17.Error, MTConnectVersions.Version17).SetName("GetByNamespace_resolves_Error_1_7");
+            yield return new TestCaseData(Namespaces.Version17.Streams, MTConnectVersions.Version17).SetName("GetByNamespace_resolves_Streams_1_7");
+
+            yield return new TestCaseData(Namespaces.Version18.Assets, MTConnectVersions.Version18).SetName("GetByNamespace_resolves_Assets_1_8");
+            yield return new TestCaseData(Namespaces.Version18.Error, MTConnectVersions.Version18).SetName("GetByNamespace_resolves_Error_1_8");
+            yield return new TestCaseData(Namespaces.Version18.Streams, MTConnectVersions.Version18).SetName("GetByNamespace_resolves_Streams_1_8");
+
+            yield return new TestCaseData(Namespaces.Version20.Assets, MTConnectVersions.Version20).SetName("GetByNamespace_resolves_Assets_2_0");
+            yield return new TestCaseData(Namespaces.Version20.Error, MTConnectVersions.Version20).SetName("GetByNamespace_resolves_Error_2_0");
+            yield return new TestCaseData(Namespaces.Version20.Streams, MTConnectVersions.Version20).SetName("GetByNamespace_resolves_Streams_2_0");
+
+            yield return new TestCaseData(Namespaces.Version21.Assets, MTConnectVersions.Version21).SetName("GetByNamespace_resolves_Assets_2_1");
+            yield return new TestCaseData(Namespaces.Version21.Error, MTConnectVersions.Version21).SetName("GetByNamespace_resolves_Error_2_1");
+            yield return new TestCaseData(Namespaces.Version21.Streams, MTConnectVersions.Version21).SetName("GetByNamespace_resolves_Streams_2_1");
+
+            yield return new TestCaseData(Namespaces.Version22.Assets, MTConnectVersions.Version22).SetName("GetByNamespace_resolves_Assets_2_2");
+            yield return new TestCaseData(Namespaces.Version22.Error, MTConnectVersions.Version22).SetName("GetByNamespace_resolves_Error_2_2");
+            yield return new TestCaseData(Namespaces.Version22.Streams, MTConnectVersions.Version22).SetName("GetByNamespace_resolves_Streams_2_2");
+
+            yield return new TestCaseData(Namespaces.Version23.Assets, MTConnectVersions.Version23).SetName("GetByNamespace_resolves_Assets_2_3");
+            yield return new TestCaseData(Namespaces.Version23.Error, MTConnectVersions.Version23).SetName("GetByNamespace_resolves_Error_2_3");
+            yield return new TestCaseData(Namespaces.Version23.Streams, MTConnectVersions.Version23).SetName("GetByNamespace_resolves_Streams_2_3");
+
+            yield return new TestCaseData(Namespaces.Version24.Assets, MTConnectVersions.Version24).SetName("GetByNamespace_resolves_Assets_2_4");
+            yield return new TestCaseData(Namespaces.Version24.Error, MTConnectVersions.Version24).SetName("GetByNamespace_resolves_Error_2_4");
+            yield return new TestCaseData(Namespaces.Version24.Streams, MTConnectVersions.Version24).SetName("GetByNamespace_resolves_Streams_2_4");
+
+            yield return new TestCaseData(Namespaces.Version25.Assets, MTConnectVersions.Version25).SetName("GetByNamespace_resolves_Assets_2_5");
+            yield return new TestCaseData(Namespaces.Version25.Error, MTConnectVersions.Version25).SetName("GetByNamespace_resolves_Error_2_5");
+            yield return new TestCaseData(Namespaces.Version25.Streams, MTConnectVersions.Version25).SetName("GetByNamespace_resolves_Streams_2_5");
+        }
+
         /// <summary>Pins that every currently-declared Devices namespace resolves to its matching version.</summary>
         /// <param name="ns">The namespace under test.</param>
         /// <param name="expected">The version <paramref name="ns"/> must resolve to.</param>
@@ -118,6 +185,96 @@ namespace MTConnect.Tests.XML
         {
             var actual = MTConnectVersion.GetByNamespace(null);
             Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that every declared Assets/Devices/Error/Streams namespace across every supported version resolves to its matching version. Exercises every enum-arm of every <c>Namespaces.Version{XX}.Match</c> disjunction, not just the Devices arm.</summary>
+        /// <param name="ns">The namespace under test.</param>
+        /// <param name="expected">The version <paramref name="ns"/> must resolve to.</param>
+        [TestCaseSource(nameof(AllKindsAllVersions))]
+        public void GetByNamespace_returns_matching_version_for_every_kind_of_every_version(string ns, Version expected)
+        {
+            var actual = MTConnectVersion.GetByNamespace(ns);
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        /// <summary>Pins that an empty-string namespace (the value <c>XmlDocument.LoadXml</c> yields for a document with no <c>xmlns</c>) defaults to the latest supported version rather than an empty one.</summary>
+        [Test]
+        public void GetByNamespace_empty_string_defaults_to_Max()
+        {
+            var actual = MTConnectVersion.GetByNamespace(string.Empty);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that a whitespace-only namespace defaults to the latest supported version. Whitespace-only strings do not equal any declared namespace constant, so they must fall through the dispatch chain to the Max fallback.</summary>
+        /// <param name="ns">The whitespace-only namespace under test.</param>
+        [TestCase(" ")]
+        [TestCase("\t")]
+        [TestCase("\n")]
+        [TestCase("   \t\n  ")]
+        public void GetByNamespace_whitespace_only_defaults_to_Max(string ns)
+        {
+            var actual = MTConnectVersion.GetByNamespace(ns);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that the dispatch is case-sensitive per the XML namespace-URI spec: an upper-case variant of a canonical namespace URI does not match, and falls through to Max. Guards against a future well-intentioned case-fold refactor that would silently accept malformed documents.</summary>
+        /// <param name="ns">The case-variant namespace under test.</param>
+        [TestCase("URN:MTCONNECT.ORG:MTCONNECTSTREAMS:2.7")]
+        [TestCase("Urn:Mtconnect.Org:MTConnectStreams:2.7")]
+        [TestCase("urn:mtconnect.org:mtconnectstreams:2.7")]
+        [TestCase("urn:mtconnect.org:MTConnectSTREAMS:2.6")]
+        public void GetByNamespace_case_variant_of_declared_namespace_defaults_to_Max(string ns)
+        {
+            var actual = MTConnectVersion.GetByNamespace(ns);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that a namespace with leading/trailing whitespace does not match a declared constant (string equality is exact) and therefore falls through to Max.</summary>
+        /// <param name="ns">The padded namespace under test.</param>
+        [TestCase(" urn:mtconnect.org:MTConnectStreams:2.7")]
+        [TestCase("urn:mtconnect.org:MTConnectStreams:2.7 ")]
+        [TestCase(" urn:mtconnect.org:MTConnectStreams:2.7 ")]
+        public void GetByNamespace_padded_namespace_defaults_to_Max(string ns)
+        {
+            var actual = MTConnectVersion.GetByNamespace(ns);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins the public <see cref="MTConnectVersion.Get(string)"/> entry point: a well-formed XML document declaring a canonical MTConnect namespace resolves through <c>Namespaces.Get</c> to the matching version. Exercises the full public-API surface of the class, not just the <c>GetByNamespace</c> internal.</summary>
+        /// <param name="xmlNamespace">The namespace URI to embed as the root element's default namespace.</param>
+        /// <param name="expected">The version <paramref name="xmlNamespace"/> must resolve to.</param>
+        [TestCase("urn:mtconnect.org:MTConnectStreams:1.0", "1.0")]
+        [TestCase("urn:mtconnect.org:MTConnectStreams:2.5", "2.5")]
+        [TestCase("urn:mtconnect.org:MTConnectStreams:2.6", "2.6")]
+        [TestCase("urn:mtconnect.org:MTConnectStreams:2.7", "2.7")]
+        [TestCase("urn:mtconnect.org:MTConnectDevices:2.7", "2.7")]
+        [TestCase("urn:mtconnect.org:MTConnectAssets:2.7", "2.7")]
+        [TestCase("urn:mtconnect.org:MTConnectError:2.7", "2.7")]
+        public void Get_extracts_namespace_from_xml_and_dispatches_to_matching_version(string xmlNamespace, string expected)
+        {
+            var xml = "<MTConnectStreams xmlns=\"" + xmlNamespace + "\" />";
+            var actual = MTConnectVersion.Get(xml);
+            Assert.That(actual, Is.EqualTo(Version.Parse(expected)));
+        }
+
+        /// <summary>Pins that <see cref="MTConnectVersion.Get(string)"/> against a well-formed XML document with no namespace declaration defaults to Max — exercises the empty-string boundary of <c>GetByNamespace</c> reached from the <c>Get(xml)</c> entry point.</summary>
+        [Test]
+        public void Get_returns_Max_when_xml_has_no_namespace()
+        {
+            var xml = "<MTConnectStreams />";
+            var actual = MTConnectVersion.Get(xml);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
+        /// <summary>Pins that <see cref="MTConnectVersion.Get(string)"/> resolves an XML document declaring a v2.7 namespace to <c>Version27</c>, not to an empty version — the exact bug the PR fixes, re-asserted through the <c>Get(xml)</c> entry point instead of just <c>GetByNamespace</c>.</summary>
+        [Test]
+        public void Get_v27_xml_does_not_fall_through_to_empty_version()
+        {
+            var xml = "<MTConnectStreams xmlns=\"urn:mtconnect.org:MTConnectStreams:2.7\" />";
+            var actual = MTConnectVersion.Get(xml);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Version27));
+            Assert.That(actual.Major, Is.EqualTo(2));
+            Assert.That(actual.Minor, Is.EqualTo(7));
         }
     }
 }
