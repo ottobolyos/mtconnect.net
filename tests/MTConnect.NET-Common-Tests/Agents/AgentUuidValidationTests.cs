@@ -818,6 +818,150 @@ namespace MTConnect.Tests.Common.Agents
         }
 
         // ------------------------------------------------------------------
+        // TryValidate boundary characterisation — pins the delegated
+        // Guid.TryParse contract on the input classes the resolver may
+        // receive from operators or a hand-edited state file. Closes the
+        // §1.0d-trigies-novodecies coverage FLOOR on boundary classes.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// <see cref="DeterministicAgentUuid.TryValidate"/> delegates to
+        /// <see cref="Guid.TryParse(string, out Guid)"/>, which trims leading
+        /// and trailing ASCII whitespace (space, tab, CR, LF). A copy-pasted
+        /// value with stray whitespace is accepted and normalised to the
+        /// canonical hyphenated "D" form. Pins that delegated contract so a
+        /// future .NET runtime tightening (or a swap to
+        /// <c>Guid.TryParseExact</c>) does not silently reject the input
+        /// class operators most commonly produce.
+        /// </summary>
+        [TestCase(" 6ba7b810-9dad-11d1-80b4-00c04fd430c8")]
+        [TestCase("6ba7b810-9dad-11d1-80b4-00c04fd430c8 ")]
+        [TestCase(" 6ba7b810-9dad-11d1-80b4-00c04fd430c8 ")]
+        [TestCase("\t6ba7b810-9dad-11d1-80b4-00c04fd430c8\r\n")]
+        public void TryValidate_leading_and_trailing_whitespace_is_trimmed_and_normalised(string input)
+        {
+            const string Expected = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+            var ok = DeterministicAgentUuid.TryValidate(input, out var normalized);
+
+            Assert.That(ok, Is.True,
+                "Guid.TryParse trims leading/trailing whitespace — TryValidate must forward that acceptance.");
+            Assert.That(normalized, Is.EqualTo(Expected),
+                "The trimmed value must round-trip to the canonical D form.");
+        }
+
+        /// <summary>
+        /// Mixed-case hex is accepted (RFC 4122 case-insensitive) and the
+        /// output is normalised to lowercase so the wire representation is
+        /// stable regardless of how the operator typed the value. Companion
+        /// to <see cref="TryValidate_uppercase_hex_is_normalised_to_lowercase"/>.
+        /// </summary>
+        [Test]
+        public void TryValidate_mixed_case_hex_is_accepted_and_normalised_to_lowercase()
+        {
+            const string MixedCase = "6Ba7B810-9dAd-11D1-80B4-00c04Fd430c8";
+            const string Expected  = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+            var ok = DeterministicAgentUuid.TryValidate(MixedCase, out var normalized);
+
+            Assert.That(ok, Is.True);
+            Assert.That(normalized, Is.EqualTo(Expected));
+        }
+
+        /// <summary>
+        /// Inputs with an embedded control character in the middle of the
+        /// UUID text (NUL, CRLF, space) must be rejected — trimming only
+        /// removes outer whitespace, so any interior control byte breaks
+        /// the parse. Closes the "malformed-in-the-middle" boundary that
+        /// the redaction guard already handles at the warn layer.
+        /// </summary>
+        [TestCase("6ba7b810-9dad-11d1-80b4-00c04fd430c8\0")]      // trailing NUL — Guid.TryParse rejects
+        [TestCase("6ba7b810\09dad-11d1-80b4-00c04fd430c8")]       // embedded NUL
+        [TestCase("6ba7b810\r\n9dad-11d1-80b4-00c04fd430c8")]     // embedded CRLF
+        [TestCase("6ba7b810 9dad-11d1-80b4-00c04fd430c8")]        // embedded space
+        [TestCase("6ba7b810\t9dad-11d1-80b4-00c04fd430c8")]       // embedded tab
+        public void TryValidate_interior_control_or_whitespace_is_rejected(string input)
+        {
+            var ok = DeterministicAgentUuid.TryValidate(input, out var normalized);
+
+            Assert.That(ok, Is.False,
+                "Guid.TryParse only trims outer whitespace; interior control bytes must be rejected.");
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
+        /// Overlong inputs — a valid UUID prefix followed by trailing
+        /// garbage — must be rejected. Closes the boundary class the
+        /// existing <c>"…-extra"</c> case sketches but with a much longer
+        /// tail more typical of a mis-pasted secret / bearer token.
+        /// </summary>
+        [Test]
+        public void TryValidate_overlong_input_with_valid_prefix_is_rejected()
+        {
+            var overlong = "6ba7b810-9dad-11d1-80b4-00c04fd430c8" + new string('x', 200);
+
+            var ok = DeterministicAgentUuid.TryValidate(overlong, out var normalized);
+
+            Assert.That(ok, Is.False,
+                "A valid UUID prefix + trailing garbage must not parse — full-string match required.");
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
+        /// Trailing CR/LF followed by extra text (the classic log-injection
+        /// payload shape) must be rejected at the parse layer — the redaction
+        /// guard closes the log-line-forgery risk downstream, but the parse
+        /// layer must also refuse to canonicalise the value so it never
+        /// reaches the wire.
+        /// </summary>
+        [Test]
+        public void TryValidate_trailing_crlf_with_injected_text_is_rejected()
+        {
+            const string Injected = "6ba7b810-9dad-11d1-80b4-00c04fd430c8\r\nFAKE-LOG-INJECTED";
+
+            var ok = DeterministicAgentUuid.TryValidate(Injected, out var normalized);
+
+            Assert.That(ok, Is.False);
+            Assert.That(normalized, Is.Null);
+        }
+
+        // ------------------------------------------------------------------
+        // Resolve Path-1-wins-with-malformed-Path-2 — covers the branch
+        // where a valid operator override short-circuits BEFORE the
+        // persisted-state validation runs, so no warn is emitted for the
+        // malformed persisted value. Closes the 3x3 override/persisted
+        // matrix cell not covered by the existing warn-count tests.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// When Path 1 (operator override) is valid AND Path 2 (persisted
+        /// state) is malformed, the resolver returns the override
+        /// immediately without touching the persisted-state validation —
+        /// so the warn delegate MUST NOT fire for the malformed persisted
+        /// value. Pins the early-return short-circuit at
+        /// <see cref="AgentUuidResolver.Resolve"/> line 114.
+        /// </summary>
+        [Test]
+        public void Resolve_valid_override_short_circuits_and_ignores_malformed_persisted_without_warn()
+        {
+            var messages = new List<string>();
+            const string ValidOverride    = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+            const string MalformedPersist = "definitely-not-a-uuid";
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: ValidOverride,
+                persistedUuid: MalformedPersist,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo(ValidOverride),
+                "Valid override wins Path 1; persisted state is never consulted.");
+            Assert.That(messages, Is.Empty,
+                "Path 1 short-circuits before the persisted-state warn arm — malformed persisted must be silent.");
+        }
+
+        // ------------------------------------------------------------------
         // Boot-simulation helpers — thin wrappers around AgentUuidResolver.
         // ------------------------------------------------------------------
 
