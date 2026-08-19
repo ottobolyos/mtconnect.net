@@ -6,6 +6,7 @@ using System.IO;
 using MTConnect.Agents;
 using MTConnect.Configurations;
 using NUnit.Framework;
+using NUnit.Framework.Legacy;
 
 namespace MTConnect.Tests.Common.Agents
 {
@@ -123,7 +124,7 @@ namespace MTConnect.Tests.Common.Agents
         public void DeriveFromSeed_matches_python_uuid_v5_NAMESPACE_DNS_example_com_vector()
         {
             var derived = DeterministicAgentUuid.DeriveFromSeed("example.com");
-            Assert.AreEqual("cfbff0d1-9375-5685-968c-48ce8b15ae17", derived,
+            ClassicAssert.AreEqual("cfbff0d1-9375-5685-968c-48ce8b15ae17", derived,
                 "DeriveFromSeed must reproduce the canonical UUID v5(NAMESPACE_DNS, 'example.com') vector.");
         }
 
