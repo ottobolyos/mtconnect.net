@@ -56,11 +56,46 @@ export const run = async (
   });
 };
 
+/** Argument names whose IMMEDIATELY-FOLLOWING value is a credential.
+ *  When any of these appears in the argv passed to `renderCmd`, the
+ *  next arg is redacted in the printed log line only — the value that
+ *  reaches the child process's argv is untouched. Applies to the
+ *  `--name value` form; the `--name=value` form is redacted separately
+ *  (the equals-form arg is a single token). */
+export const SECRET_ARG_NAMES: ReadonlySet<string> = new Set([
+  '--api-key',
+  '--password',
+  '-p',
+  '--token',
+]);
+
 /** Render a command for logging — quoting any arg that contains
- *  whitespace or shell-special characters. Human-readable, not
- *  round-trip parseable. */
+ *  whitespace or shell-special characters, and redacting the value
+ *  after any `SECRET_ARG_NAMES` arg so credentials never surface in
+ *  CI logs. Human-readable, not round-trip parseable. */
 export const renderCmd = (cmd: string, args: string[]): string => {
-  return [cmd, ...args.map(quoteForLog)].join(' ');
+  const rendered: string[] = [];
+  let redactNext = false;
+  for (const arg of args) {
+    if (redactNext) {
+      rendered.push('<redacted>');
+      redactNext = false;
+      continue;
+    }
+    // `--name=value` form — split at the first `=` and redact the RHS
+    // whenever the LHS is a known secret arg name.
+    const eqIdx = arg.indexOf('=');
+    if (eqIdx > 0) {
+      const lhs = arg.slice(0, eqIdx);
+      if (SECRET_ARG_NAMES.has(lhs)) {
+        rendered.push(`${lhs}=<redacted>`);
+        continue;
+      }
+    }
+    rendered.push(quoteForLog(arg));
+    if (SECRET_ARG_NAMES.has(arg)) redactNext = true;
+  }
+  return [cmd, ...rendered].join(' ');
 };
 
 /** Wrap in double quotes if the arg contains anything shell would

@@ -18,6 +18,7 @@
 
 import { strict as assert } from 'node:assert';
 import {
+  SECRET_ARG_NAMES,
   optionalEnv,
   parseDryRun,
   renderCmd,
@@ -90,6 +91,77 @@ test('renderCmd: shell-special chars force quoting', () => {
 
 test('renderCmd: empty argv renders as the bare cmd', () => {
   assert.equal(renderCmd('gh', []), 'gh');
+});
+
+// ─── renderCmd: secret redaction ───────────────────────────────
+test('renderCmd: `--api-key value` value is redacted, flag preserved', () => {
+  // Documented contract: the value AFTER any SECRET_ARG_NAMES entry is
+  // replaced by `<redacted>` in the log line only. Pin the exact
+  // rendering so a future refactor cannot silently leak the key.
+  assert.equal(
+    renderCmd('dotnet', ['nuget', 'push', '--api-key', 'topsecret']),
+    'dotnet nuget push --api-key <redacted>',
+  );
+});
+
+test('renderCmd: `--password value` and `-p value` values are redacted', () => {
+  assert.equal(
+    renderCmd('mysql', ['-u', 'root', '--password', 'hunter2']),
+    'mysql -u root --password <redacted>',
+  );
+  // `-p` alone; the arg that follows is the secret.
+  assert.equal(
+    renderCmd('curl', ['-u', 'user', '-p', 'hunter2', 'https://x']),
+    'curl -u user -p <redacted> https://x',
+  );
+});
+
+test('renderCmd: `--token value` is redacted', () => {
+  assert.equal(
+    renderCmd('gh', ['auth', 'login', '--token', 'ghp_xxx']),
+    'gh auth login --token <redacted>',
+  );
+});
+
+test('renderCmd: `--api-key=value` (equals form) is redacted, key preserved', () => {
+  // The equals-form arg is a single argv token — the redactor must
+  // detect it and rewrite only the RHS.
+  assert.equal(
+    renderCmd('dotnet', ['nuget', 'push', '--api-key=topsecret']),
+    'dotnet nuget push --api-key=<redacted>',
+  );
+  assert.equal(
+    renderCmd('gh', ['--token=ghp_xxx', 'auth']),
+    'gh --token=<redacted> auth',
+  );
+});
+
+test('renderCmd: multiple secret args each redact only their own value', () => {
+  // Guards against a "sticky" redactNext state that would drop
+  // non-secret trailing args.
+  assert.equal(
+    renderCmd('cli', [
+      '--api-key', 'k1', '--source', 'https://x',
+      '--token', 'k2', '--verbose',
+    ]),
+    'cli --api-key <redacted> --source https://x --token <redacted> --verbose',
+  );
+});
+
+test('renderCmd: secret arg at end-of-argv (no value) does not crash', () => {
+  // A malformed invocation where a secret flag is the last arg with no
+  // value. `redactNext` is set but never consumed — must not throw and
+  // must render the flag alone.
+  assert.equal(renderCmd('dotnet', ['nuget', 'push', '--api-key']), 'dotnet nuget push --api-key');
+});
+
+test('renderCmd: SECRET_ARG_NAMES export lists the documented four names', () => {
+  // Pins the API contract so a rename / deletion is a test failure
+  // rather than a silent regression.
+  assert.deepEqual(
+    [...SECRET_ARG_NAMES].sort(),
+    ['--api-key', '--password', '--token', '-p'].sort(),
+  );
 });
 
 // ─── parseDryRun ────────────────────────────────────────────────
