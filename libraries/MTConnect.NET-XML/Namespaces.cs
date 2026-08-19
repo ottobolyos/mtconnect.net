@@ -478,7 +478,7 @@ namespace MTConnect
 
             public static bool Match(string ns)
             {
-                return ns == Devices || ns == Error || ns == Streams;
+                return ns == Assets || ns == Devices || ns == Error || ns == Streams;
             }
         }
 
