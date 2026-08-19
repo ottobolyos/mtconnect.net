@@ -70,6 +70,19 @@ namespace MTConnect
 
                 var trimmed = raw.Trim();
 
+                // A comma inside a single entry is the most likely YAML
+                // typing error (e.g. `sslProtocols: [Tls12,Tls13]`
+                // where the user meant `[Tls12, Tls13]`). Enum.TryParse
+                // accepts the comma-separated string on some runtimes,
+                // which would silently widen the negotiated set;
+                // reject it up front with a targeted hint so the user
+                // sees what the fix is rather than "unknown value".
+                if (trimmed.IndexOf(',') >= 0)
+                {
+                    throw new MqttRelayConfigurationException(
+                        $"MqttRelay SslProtocols entry '{trimmed}' contains a comma. Each entry must name a single SslProtocols member; use separate list entries (e.g. ['Tls12', 'Tls13']) instead of a comma-separated string.");
+                }
+
                 // Enum.TryParse with a numeric literal succeeds even
                 // when the number is not a defined enum value. Reject
                 // numeric input outright: the config surface is
