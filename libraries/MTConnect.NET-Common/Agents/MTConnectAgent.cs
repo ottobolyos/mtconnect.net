@@ -290,7 +290,7 @@ namespace MTConnect.Agents
             _uuid = !string.IsNullOrEmpty(uuid) ? uuid : Guid.NewGuid().ToString();
             _instanceId = instanceId > 0 ? instanceId : CreateInstanceId();
             _configuration = configuration != null ? configuration : new AgentConfiguration();
-            if (_configuration != null && !string.IsNullOrEmpty(_configuration.Sender))
+            if (!string.IsNullOrEmpty(_configuration.Sender))
                 _sender = _configuration.Sender;
             _information = new MTConnectAgentInformation(_uuid, _instanceId, _deviceModelChangeTime);
             _deviceModelChangeTime = deviceModelChangeTime;

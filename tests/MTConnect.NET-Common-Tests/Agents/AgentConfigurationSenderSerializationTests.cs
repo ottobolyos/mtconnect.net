@@ -3,6 +3,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -322,36 +323,117 @@ namespace MTConnect.Tests.Common.Agents
 
         /// <summary>SaveJson with createBackup: true creates a copy of the
         /// pre-existing target file into the conventional backup directory
-        /// before overwriting.</summary>
+        /// before overwriting. Pins the copy-into-backup-directory contract
+        /// and the copy-preserves-original-content invariant so a regression
+        /// to "backup flag toggles without side-effect" would fail here,
+        /// not just the round-trip line.</summary>
         [Test]
         public void SaveJson_with_createBackup_copies_existing_target_to_backup_directory()
         {
             var jsonPath = Path.Combine(_workingDirectory, "backup.json");
             File.WriteAllText(jsonPath, "{\"sender\": \"pre-existing\"}\n");
+            var backupDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
+            var before = SnapshotBackupFiles(backupDir, ".backup.json");
 
             var updated = new AgentConfiguration { Sender = "post-backup" };
             updated.SaveJson(jsonPath, createBackup: true);
+
+            var after = SnapshotBackupFiles(backupDir, ".backup.json");
+            var newlyCreated = after.Except(before).ToArray();
+            Assert.That(newlyCreated.Length, Is.EqualTo(1),
+                "createBackup: true must emit exactly one *.backup.json file into the conventional backup directory.");
+            var backupContents = File.ReadAllText(newlyCreated[0]);
+            Assert.That(backupContents, Does.Contain("pre-existing"),
+                "The backup copy must preserve the pre-existing target's contents, not the newly-written value.");
 
             var loaded = AgentConfiguration.ReadJson<AgentConfiguration>(jsonPath);
             Assert.That(loaded, Is.Not.Null);
             Assert.That(loaded.Sender, Is.EqualTo("post-backup"));
         }
 
+        /// <summary>SaveJson with createBackup: false emits no *.backup.json
+        /// file — the negative-path companion to the createBackup: true
+        /// assertion. Pins that the backup side-effect is genuinely gated
+        /// on the flag rather than firing unconditionally.</summary>
+        [Test]
+        public void SaveJson_with_createBackup_false_does_not_write_backup_file()
+        {
+            var jsonPath = Path.Combine(_workingDirectory, "no-backup.json");
+            File.WriteAllText(jsonPath, "{\"sender\": \"pre-existing\"}\n");
+            var backupDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
+            var before = SnapshotBackupFiles(backupDir, ".backup.json");
+
+            var updated = new AgentConfiguration { Sender = "post-write" };
+            updated.SaveJson(jsonPath, createBackup: false);
+
+            var after = SnapshotBackupFiles(backupDir, ".backup.json");
+            Assert.That(after.Except(before), Is.Empty,
+                "createBackup: false must produce zero new *.backup.json files in the conventional backup directory.");
+        }
+
         /// <summary>SaveYaml with createBackup: true copies the pre-existing
         /// target file into the conventional backup directory before
-        /// overwriting.</summary>
+        /// overwriting. Pins the copy-into-backup-directory contract and
+        /// the copy-preserves-original-content invariant per the JSON
+        /// companion above.</summary>
         [Test]
         public void SaveYaml_with_createBackup_copies_existing_target_to_backup_directory()
         {
             var yamlPath = Path.Combine(_workingDirectory, "backup.yaml");
             File.WriteAllText(yamlPath, "sender: pre-existing\n");
+            var backupDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
+            var before = SnapshotBackupFiles(backupDir, ".backup.yaml");
 
             var updated = new AgentConfiguration { Sender = "post-backup" };
             updated.SaveYaml(yamlPath, createBackup: true);
 
+            var after = SnapshotBackupFiles(backupDir, ".backup.yaml");
+            var newlyCreated = after.Except(before).ToArray();
+            Assert.That(newlyCreated.Length, Is.EqualTo(1),
+                "createBackup: true must emit exactly one *.backup.yaml file into the conventional backup directory.");
+            var backupContents = File.ReadAllText(newlyCreated[0]);
+            Assert.That(backupContents, Does.Contain("pre-existing"),
+                "The backup copy must preserve the pre-existing target's contents, not the newly-written value.");
+
             var loaded = AgentConfiguration.ReadYaml<AgentConfiguration>(yamlPath);
             Assert.That(loaded, Is.Not.Null);
             Assert.That(loaded.Sender, Is.EqualTo("post-backup"));
+        }
+
+        /// <summary>SaveYaml with createBackup: false emits no *.backup.yaml
+        /// file — the negative-path companion.</summary>
+        [Test]
+        public void SaveYaml_with_createBackup_false_does_not_write_backup_file()
+        {
+            var yamlPath = Path.Combine(_workingDirectory, "no-backup.yaml");
+            File.WriteAllText(yamlPath, "sender: pre-existing\n");
+            var backupDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backup");
+            var before = SnapshotBackupFiles(backupDir, ".backup.yaml");
+
+            var updated = new AgentConfiguration { Sender = "post-write" };
+            updated.SaveYaml(yamlPath, createBackup: false);
+
+            var after = SnapshotBackupFiles(backupDir, ".backup.yaml");
+            Assert.That(after.Except(before), Is.Empty,
+                "createBackup: false must produce zero new *.backup.yaml files in the conventional backup directory.");
+        }
+
+        /// <summary>Snapshots the current set of files under
+        /// <paramref name="backupDir"/> whose name ends with
+        /// <paramref name="suffix"/>. Returns an empty array if the
+        /// directory does not yet exist. Used by the backup-assertion tests
+        /// to compute a "before &#x2192; after" delta that isolates the
+        /// newly-created backup file even when other tests in the same
+        /// run share the process-wide backup directory.</summary>
+        /// <param name="backupDir">Absolute path of the process-wide backup directory.</param>
+        /// <param name="suffix">Filename suffix to match (for example, <c>.backup.json</c>).</param>
+        /// <returns>Ordinal-sorted array of absolute paths for files matching <paramref name="suffix"/>.</returns>
+        private static string[] SnapshotBackupFiles(string backupDir, string suffix)
+        {
+            if (!Directory.Exists(backupDir)) return Array.Empty<string>();
+            return Directory.EnumerateFiles(backupDir, "*" + suffix, SearchOption.TopDirectoryOnly)
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .ToArray();
         }
 
         /// <summary>DefaultVersionValue getter returns the canonical
