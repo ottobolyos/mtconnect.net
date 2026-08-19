@@ -7,7 +7,6 @@ using DeepEqual.Syntax;
 using MTConnect.Observations;
 using MTConnect.Streams.Xml;
 using NUnit.Framework;
-using NUnit.Framework.Legacy;
 
 namespace MTConnect.Tests.XML
 {
@@ -36,10 +35,10 @@ namespace MTConnect.Tests.XML
             using var xmlStream = XmlReader.Create(new MemoryStream(Encoding.UTF8.GetBytes(text)));
             var doc = XmlStreamsResponseDocument.ReadXml(xmlStream);
 
-            ClassicAssert.AreEqual(1, doc.Streams.Count());
+            Assert.That(doc.Streams.Count(), Is.EqualTo(1));
             var stream = doc.Streams.Single();
             var conditions = stream.Conditions.ToArray();
-            ClassicAssert.AreEqual(2, conditions.Length);
+            Assert.That(conditions.Length, Is.EqualTo(2));
 
             var cond1 = new ConditionObservation()
             {
