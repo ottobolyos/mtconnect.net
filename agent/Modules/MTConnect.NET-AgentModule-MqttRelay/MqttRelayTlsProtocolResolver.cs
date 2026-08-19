@@ -82,14 +82,12 @@ namespace MTConnect
                         $"MqttRelay SslProtocols entry '{trimmed}' is numeric. Only enum member names are accepted (e.g. 'Tls12', 'Tls13').");
                 }
 
-                SslProtocols parsed;
-#if NET5_0_OR_GREATER
-                if (!Enum.TryParse(trimmed, ignoreCase: true, out parsed)
+                // Enum.TryParse<T> resolves identically across every
+                // TFM this project targets (net461 → net8.0) so a
+                // per-TFM #if split adds no behaviour and only invites
+                // one branch to drift from the other.
+                if (!Enum.TryParse<SslProtocols>(trimmed, ignoreCase: true, out var parsed)
                     || !Enum.IsDefined(typeof(SslProtocols), parsed))
-#else
-                if (!Enum.TryParse<SslProtocols>(trimmed, ignoreCase: true, out parsed)
-                    || !Enum.IsDefined(typeof(SslProtocols), parsed))
-#endif
                 {
                     throw new MqttRelayConfigurationException(
                         $"MqttRelay SslProtocols entry '{trimmed}' is not a known SslProtocols value on this .NET runtime. Valid names on this runtime: {DescribeValidNames()}.");
