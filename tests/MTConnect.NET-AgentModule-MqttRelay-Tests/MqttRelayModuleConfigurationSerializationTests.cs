@@ -89,5 +89,74 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
 
             Assert.That(roundTripped.SslProtocols.Single(), Is.EqualTo("Tls13"));
         }
+
+        /// <summary>Pins the UseTls YAML round-trip: the module-level opt-in flag survives serialise-then-deserialise so a user cannot accidentally lose their TLS opt-in through the binder.</summary>
+        [Test]
+        public void UseTls_round_trips_via_yaml()
+        {
+            var original = new MqttRelayModuleConfiguration { UseTls = true };
+            var (serializer, deserializer) = BuildBinderPair();
+
+            var yaml = serializer.Serialize(original);
+            var roundTripped = deserializer.Deserialize<MqttRelayModuleConfiguration>(yaml);
+
+            Assert.That(yaml, Does.Contain("useTls:"),
+                "The binder uses camelCase; the field name must serialise as 'useTls'.");
+            Assert.That(roundTripped.UseTls, Is.True);
+        }
+
+        /// <summary>Pins the Tls-subtree YAML round-trip: the VerifyClientCertificate + OmitCAValidation flags reach the deserialised object, so the Tls.* flag surface the options builder consumes cannot be silently dropped by the binder.</summary>
+        [Test]
+        public void Tls_flags_round_trip_via_yaml()
+        {
+            var original = new MqttRelayModuleConfiguration
+            {
+                UseTls = true,
+                Tls = new MTConnect.Tls.TlsConfiguration
+                {
+                    VerifyClientCertificate = true,
+                    OmitCAValidation = true
+                }
+            };
+            var (serializer, deserializer) = BuildBinderPair();
+
+            var yaml = serializer.Serialize(original);
+            var roundTripped = deserializer.Deserialize<MqttRelayModuleConfiguration>(yaml);
+
+            Assert.That(roundTripped.Tls, Is.Not.Null,
+                "The Tls subtree must survive the binder round-trip.");
+            Assert.That(roundTripped.Tls.VerifyClientCertificate, Is.True);
+            Assert.That(roundTripped.Tls.OmitCAValidation, Is.True);
+        }
+
+        /// <summary>Pins the YAML shape: when the user does not set UseTls, the default (false) round-trips too - no accidental default-on for TLS via the binder.</summary>
+        [Test]
+        public void UseTls_default_false_round_trips_via_yaml()
+        {
+            var original = new MqttRelayModuleConfiguration();
+            var (serializer, deserializer) = BuildBinderPair();
+
+            var yaml = serializer.Serialize(original);
+            var roundTripped = deserializer.Deserialize<MqttRelayModuleConfiguration>(yaml);
+
+            Assert.That(original.UseTls, Is.False, "Sanity: default UseTls is false.");
+            Assert.That(roundTripped.UseTls, Is.False);
+        }
+
+        /// <summary>Pins the binder shape for a user-authored YAML that only sets useTls: the SslProtocols default set survives untouched (user's minimal opt-in does not clobber the shipped default protocol list).</summary>
+        [Test]
+        public void User_yaml_setting_only_useTls_preserves_default_SslProtocols()
+        {
+            var (_, deserializer) = BuildBinderPair();
+            var yaml = "useTls: true\n";
+
+            var configuration = deserializer.Deserialize<MqttRelayModuleConfiguration>(yaml);
+
+            Assert.That(configuration.UseTls, Is.True);
+            Assert.That(configuration.SslProtocols, Is.Not.Null,
+                "A user who sets only useTls: true must still receive the shipped default SslProtocols list.");
+            Assert.That(configuration.SslProtocols, Does.Contain("Tls12"),
+                "The shipped default protocol set must include Tls12.");
+        }
     }
 }

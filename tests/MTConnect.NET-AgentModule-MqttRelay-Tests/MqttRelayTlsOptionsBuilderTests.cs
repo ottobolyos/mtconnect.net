@@ -5,8 +5,12 @@ using MQTTnet.Client;
 using MTConnect.Configurations;
 using MTConnect.Tls;
 using NUnit.Framework;
+using System;
+using System.IO;
 using System.Linq;
 using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 
 namespace MTConnect.AgentModule.MqttRelay.Tests
 {
@@ -199,5 +203,174 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
             Assert.That(options, Is.Null,
                 "Credentials alone must not force TLS on; the user must opt in via UseTls or Tls.");
         }
+
+        /// <summary>Pins the null-configuration early return: a null configuration argument returns null instead of raising, so a caller that guards for missing config can skip the WithTlsOptions call cleanly.</summary>
+        [Test]
+        public void Build_returns_null_when_configuration_is_null()
+        {
+            var options = MqttRelayTlsOptionsBuilder.Build(null, SslProtocols.Tls12);
+
+            Assert.That(options, Is.Null);
+        }
+
+        /// <summary>Pins the SslProtocols passthrough for the Tls13 arm - the resolver output for a Tls13-only opt-in reaches the built options.</summary>
+        [Test]
+        public void Build_applies_Tls13_when_passed_by_resolver()
+        {
+#if NET5_0_OR_GREATER
+            var configuration = new MqttRelayModuleConfiguration { UseTls = true };
+
+            var options = MqttRelayTlsOptionsBuilder.Build(configuration, SslProtocols.Tls13);
+
+            Assert.That(options.SslProtocol, Is.EqualTo(SslProtocols.Tls13));
+#else
+            Assert.Ignore("SslProtocols.Tls13 is not defined on this target framework.");
+#endif
+        }
+
+        /// <summary>Pins the OR-set SslProtocols passthrough: a Tls12 | Tls13 bitmask survives the builder.Build() step and reaches the options object as the same bitmask.</summary>
+        [Test]
+        public void Build_applies_Tls12_or_Tls13_bitmask()
+        {
+#if NET5_0_OR_GREATER
+            var configuration = new MqttRelayModuleConfiguration { UseTls = true };
+            var expected = SslProtocols.Tls12 | SslProtocols.Tls13;
+
+            var options = MqttRelayTlsOptionsBuilder.Build(configuration, expected);
+
+            Assert.That(options.SslProtocol, Is.EqualTo(expected));
+#else
+            Assert.Ignore("SslProtocols.Tls13 is not defined on this target framework.");
+#endif
+        }
+
+#if NET5_0_OR_GREATER
+        // Certificate-loading branches. We generate a self-signed cert
+        // in-process and write it to a temp PFX so the builder's real
+        // certificate-load path (via TlsConfiguration.GetCertificate())
+        // is exercised end-to-end. Each test cleans up its own temp file
+        // in TearDown.
+        private string _tempPfxPath;
+
+        [TearDown]
+        public void CleanupPfx()
+        {
+            if (!string.IsNullOrEmpty(_tempPfxPath) && File.Exists(_tempPfxPath))
+            {
+                try { File.Delete(_tempPfxPath); } catch { }
+                _tempPfxPath = null;
+            }
+        }
+
+        private string CreateTempSelfSignedPfx(string password)
+        {
+            using (var rsa = RSA.Create(2048))
+            {
+                var request = new CertificateRequest(
+                    "CN=MqttRelayTlsOptionsBuilderTests",
+                    rsa,
+                    HashAlgorithmName.SHA256,
+                    RSASignaturePadding.Pkcs1);
+                var cert = request.CreateSelfSigned(
+                    DateTimeOffset.UtcNow.AddMinutes(-5),
+                    DateTimeOffset.UtcNow.AddDays(1));
+                var pfxBytes = cert.Export(X509ContentType.Pkcs12, password);
+                var path = Path.Combine(Path.GetTempPath(),
+                    "mqttrelay-tls-test-" + Guid.NewGuid().ToString("N") + ".pfx");
+                File.WriteAllBytes(path, pfxBytes);
+                return path;
+            }
+        }
+
+        /// <summary>Pins the client-cert-attached branch: when the Tls.Pfx path resolves to a loadable cert, the builder attaches it via ClientCertificatesProvider.</summary>
+        [Test]
+        public void Build_attaches_client_certificate_when_Pfx_path_configured()
+        {
+            const string password = "test-pw-42";
+            _tempPfxPath = CreateTempSelfSignedPfx(password);
+
+            var configuration = new MqttRelayModuleConfiguration
+            {
+                UseTls = true,
+                Tls = new TlsConfiguration
+                {
+                    Pfx = new PfxCertificateConfiguration
+                    {
+                        CertificatePath = _tempPfxPath,
+                        CertificatePassword = password
+                    }
+                }
+            };
+
+            var options = MqttRelayTlsOptionsBuilder.Build(configuration, SslProtocols.Tls12);
+
+            Assert.That(options, Is.Not.Null);
+            Assert.That(options.ClientCertificatesProvider, Is.Not.Null,
+                "A resolved client cert must be attached to the options object; a null provider means the cert was dropped.");
+            var certs = options.ClientCertificatesProvider.GetCertificates();
+            Assert.That(certs, Is.Not.Null);
+            Assert.That(certs.Count, Is.GreaterThanOrEqualTo(1),
+                "The provider must expose at least the loaded client cert.");
+        }
+
+        /// <summary>Pins the OmitCAValidation=true branch: even when a client cert is loaded and validation is disabled, options build without a CA cert added and the flag surface still lands.</summary>
+        [Test]
+        public void Build_honours_OmitCAValidation_true_when_client_cert_present()
+        {
+            const string password = "test-pw-omit";
+            _tempPfxPath = CreateTempSelfSignedPfx(password);
+
+            var configuration = new MqttRelayModuleConfiguration
+            {
+                UseTls = true,
+                Tls = new TlsConfiguration
+                {
+                    OmitCAValidation = true,
+                    VerifyClientCertificate = false,
+                    Pfx = new PfxCertificateConfiguration
+                    {
+                        CertificatePath = _tempPfxPath,
+                        CertificatePassword = password
+                    }
+                }
+            };
+
+            var options = MqttRelayTlsOptionsBuilder.Build(configuration, SslProtocols.Tls12);
+
+            Assert.That(options, Is.Not.Null);
+            Assert.That(options.AllowUntrustedCertificates, Is.True,
+                "VerifyClientCertificate=false must surface as AllowUntrustedCertificates=true.");
+            Assert.That(options.ClientCertificatesProvider, Is.Not.Null,
+                "The client cert must survive the OmitCAValidation=true branch.");
+        }
+
+        /// <summary>Pins the malformed-Pfx failure mode: an unreadable Pfx path surfaces via TlsConfiguration.GetCertificate() returning Success=false, and the builder simply does NOT attach a client cert (silent skip is the current contract; the caller sees no crash).</summary>
+        [Test]
+        public void Build_skips_client_cert_when_Pfx_path_unreadable()
+        {
+            var bogusPath = Path.Combine(Path.GetTempPath(),
+                "mqttrelay-nonexistent-" + Guid.NewGuid().ToString("N") + ".pfx");
+
+            var configuration = new MqttRelayModuleConfiguration
+            {
+                UseTls = true,
+                Tls = new TlsConfiguration
+                {
+                    Pfx = new PfxCertificateConfiguration
+                    {
+                        CertificatePath = bogusPath,
+                        CertificatePassword = "irrelevant"
+                    }
+                }
+            };
+
+            var options = MqttRelayTlsOptionsBuilder.Build(configuration, SslProtocols.Tls12);
+
+            Assert.That(options, Is.Not.Null,
+                "TLS is still enabled; the malformed cert must not clobber the base options.");
+            Assert.That(options.ClientCertificatesProvider, Is.Null,
+                "A failed cert load must not attach a client-cert provider.");
+        }
+#endif
     }
 }
