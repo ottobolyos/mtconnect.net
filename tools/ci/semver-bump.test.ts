@@ -11,10 +11,16 @@
  */
 
 import { strict as assert } from 'node:assert';
+import { execSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   aggregateBump,
   applyBump,
   bumpKindFor,
+  commitsInRange,
+  countCommitsSinceLastDevBoundary,
   isDevTag,
   isStableCutMarker,
 } from './semver-bump.ts';
@@ -266,6 +272,106 @@ test('isDevTag: accepts zero counter', () => {
   assert.equal(isDevTag('v6.6.0-dev.0'), true);
   assert.equal(isDevTag('v0.0.0-dev.1'), true);
   assert.equal(isDevTag('v10.20.30-dev.400'), true);
+});
+
+// ─── countCommitsSinceLastDevBoundary (git-fixture) ─────────────
+// Builds a throw-away git repo, then chdir's into it so the module's
+// bare `git` calls resolve to that repo. Verifies the two counter
+// paths (`countCommitsSinceLastDevBoundary` + the `--range`-derived
+// `Math.max(1, commits.length)`) agree on a boundary that lives at
+// HEAD~1 — the fixture the docstring pins as the reference case.
+test('countCommitsSinceLastDevBoundary: boundary at HEAD~1 → N=1 (agrees with --range path)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'semver-boundary-'));
+  const g = (cmd: string): string =>
+    execSync(`git ${cmd}`, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] })
+      .toString()
+      .trim();
+  const cwd = process.cwd();
+  try {
+    g('init -q -b master');
+    g('config user.email test@example');
+    g('config user.name test');
+    // Suppress developer-machine gpg/signing so `git tag` and
+    // `git commit` do not prompt for a key inside the sandbox.
+    g('config commit.gpgsign false');
+    g('config tag.gpgsign false');
+    g('commit -q --allow-empty -m "initial"');
+    g('tag v0.0.0');
+    g('commit -q --allow-empty -m "chore(release): publish new stable"');
+    const markerSha = g('rev-parse HEAD');
+    g('commit -q --allow-empty -m "feat(agent): post-marker one"');
+
+    process.chdir(dir);
+    // Boundary path: walk from stable tag until the marker at index 1
+    // (HEAD~1). Excludes the boundary itself → N = 1.
+    assert.equal(countCommitsSinceLastDevBoundary(), 1);
+    // --range path: pass a range that STARTS at the marker (exclusive
+    // per git's `A..B` semantics); one commit remains → N = 1.
+    const rangeCommits = commitsInRange(markerSha, 'HEAD');
+    assert.equal(Math.max(1, rangeCommits.length), 1);
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('countCommitsSinceLastDevBoundary: boundary at HEAD itself → N=1 (floor guard)', () => {
+  // A stable-cut marker sitting on HEAD would return i = 0 without the
+  // Math.max(1, i) floor; pin the guard so the next `-dev.N` for that
+  // commit never collapses to `-dev.0`.
+  const dir = mkdtempSync(join(tmpdir(), 'semver-boundary-head-'));
+  const g = (cmd: string): string =>
+    execSync(`git ${cmd}`, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] })
+      .toString()
+      .trim();
+  const cwd = process.cwd();
+  try {
+    g('init -q -b master');
+    g('config user.email test@example');
+    g('config user.name test');
+    // Suppress developer-machine gpg/signing so `git tag` and
+    // `git commit` do not prompt for a key inside the sandbox.
+    g('config commit.gpgsign false');
+    g('config tag.gpgsign false');
+    g('commit -q --allow-empty -m "initial"');
+    g('tag v0.0.0');
+    g('commit -q --allow-empty -m "chore(release): publish new stable"');
+    process.chdir(dir);
+    assert.equal(countCommitsSinceLastDevBoundary(), 1);
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('countCommitsSinceLastDevBoundary: no boundary, three commits since stable → N=3', () => {
+  // Fall-through arm: no marker, no dev tag; N equals the plain commit
+  // count. Pins the trailing `Math.max(1, commits.length)`.
+  const dir = mkdtempSync(join(tmpdir(), 'semver-noboundary-'));
+  const g = (cmd: string): string =>
+    execSync(`git ${cmd}`, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] })
+      .toString()
+      .trim();
+  const cwd = process.cwd();
+  try {
+    g('init -q -b master');
+    g('config user.email test@example');
+    g('config user.name test');
+    // Suppress developer-machine gpg/signing so `git tag` and
+    // `git commit` do not prompt for a key inside the sandbox.
+    g('config commit.gpgsign false');
+    g('config tag.gpgsign false');
+    g('commit -q --allow-empty -m "initial"');
+    g('tag v0.0.0');
+    g('commit -q --allow-empty -m "feat(agent): one"');
+    g('commit -q --allow-empty -m "fix(agent): two"');
+    g('commit -q --allow-empty -m "docs(agent): three"');
+    process.chdir(dir);
+    assert.equal(countCommitsSinceLastDevBoundary(), 3);
+  } finally {
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 process.stdout.write(`\n${passed} assertions passed.\n`);

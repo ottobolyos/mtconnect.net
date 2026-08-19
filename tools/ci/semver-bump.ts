@@ -18,7 +18,10 @@
  *         under a green `pre-merge` gate, but the algorithm stays
  *         permissive so a partially-migrated history still resolves).
  *     The largest bump wins — a `BREAKING CHANGE` anywhere in the
- *     range beats every `feat` and `fix`.
+ *     range beats every `feat` and `fix`. An all-`none` range still
+ *     lands a patch bump via `applyBump`'s `none → patch` fall-through
+ *     so the emitted version is distinct from the last stable tag
+ *     (avoids a `-dev.N` collision on a chore-only range).
  *  4. Count the commits reachable from `HEAD` back to the most
  *     recent commit that either
  *       (a) is the stable-cut marker
@@ -36,9 +39,10 @@
  *
  * When `--range <A>..<B>` is passed, the commit range is taken
  * verbatim instead of being derived from the most recent stable tag.
- * The pre-release counter is then just the number of commits in the
- * range plus one (matches the tag-derived case when the range starts
- * at the stable cut). Used by the unit-test hook in `test.ts`.
+ * The pre-release counter is then the number of commits in the range,
+ * floored at one so an empty range still produces a distinct dev
+ * version (matches the tag-derived case when the range starts at the
+ * stable cut). Used by the unit-test hook in `test.ts`.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -196,24 +200,27 @@ export const commitsInRange = (
 };
 
 /** Count how many commits reachable from HEAD (walking parents) come
- *  before we hit either the stable-cut marker or a `vX.Y.Z-dev.N`
+ *  BEFORE we hit either the stable-cut marker or a `vX.Y.Z-dev.N`
  *  tag. Returns the count of commits that are still on the "current"
- *  dev cycle, i.e. the `N` for the next `<version>-dev.<N>`. */
+ *  dev cycle, i.e. the `N` for the next `<version>-dev.<N>`. The
+ *  boundary commit itself is excluded — it belongs to the prior
+ *  cycle — and the counter is floored at one so a boundary sitting on
+ *  HEAD still produces a distinct dev version. */
 export const countCommitsSinceLastDevBoundary = (): number => {
   // Fastest path: if HEAD or an ancestor is tagged with a stable version,
-  // the count is (commits since that tag) + 1.
+  // walk the range and stop at the first stable-cut marker or dev tag.
   const stable = lastStableTag();
   const commits = commitsInRange(stable);
 
-  // Now scan those commits for the stable-cut marker or a dev tag on
-  // the commit itself. If we find one, N = (commits between it and
-  // HEAD) + 1.
+  // `commits` is ordered newest-first (git log default). Index `i` is
+  // the number of commits between HEAD and `commits[i]` exclusive —
+  // exactly the counter value once we exclude the boundary itself.
   for (let i = 0; i < commits.length; i++) {
     const c = commits[i]!;
     if (isStableCutMarker(c.subject)) {
-      return i + 1;
+      return Math.max(1, i);
     }
-    // Any dev tag on this commit resets the counter to i + 1.
+    // Any dev tag on this commit ends the current cycle at index `i`.
     const tagsRaw = spawnSync(
       'git',
       ['tag', '--points-at', c.sha, '--list', 'v*-dev.*'],
@@ -221,7 +228,7 @@ export const countCommitsSinceLastDevBoundary = (): number => {
     );
     if (tagsRaw.status === 0) {
       const tags = tagsRaw.stdout.split('\n').map((t) => t.trim()).filter((t) => isDevTag(t));
-      if (tags.length > 0) return i + 1;
+      if (tags.length > 0) return Math.max(1, i);
     }
   }
   // No stable-cut marker and no dev-tag boundary found — the count
