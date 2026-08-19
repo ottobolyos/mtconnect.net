@@ -15,7 +15,12 @@
  *                                          [--repo <owner/name>]
  *                                          [--assets <dir> ...]
  *                                          [--docker-image <ref>]
+ *                                          [--target <sha>]
  *                                          [--dry-run]
+ *
+ * `--target <sha>` pins the tag to the commit that produced the
+ * artefacts. Omitting it lets `gh release create` pin the tag to the
+ * tip of the default branch, which drifts under concurrent pushes.
  *
  * The release is always created as `--prerelease` (Phase 1 automates
  * only the dev pre-release cadence; stable releases stay under the
@@ -39,6 +44,7 @@ export type Options = {
   repo: string;
   assetDirs: string[];
   dockerImage: string | undefined;
+  target: string | undefined;
   dryRun: boolean;
 };
 
@@ -55,6 +61,7 @@ export const parseOptions = (argv: string[]): Options => {
       repo: { type: 'string' },
       assets: { type: 'string', multiple: true },
       'docker-image': { type: 'string' },
+      target: { type: 'string' },
     },
   });
   if (!values.version) {
@@ -69,13 +76,17 @@ export const parseOptions = (argv: string[]): Options => {
     repo: values.repo ?? 'TrakHound/MTConnect.NET',
     assetDirs,
     dockerImage: values['docker-image'],
+    target: values.target,
     dryRun,
   };
 };
 
 /** Enumerate assets across the requested directories, returning
- *  absolute paths. Recurses one level so `sbom/*.spdx.json` and
- *  `nupkg/*.nupkg` are both picked up without special-casing. */
+ *  absolute paths. Recurses so nested SBOM layouts such as
+ *  `sbom/_manifest/spdx_2.2/manifest.spdx.json` (the shape
+ *  `Microsoft.Sbom.DotNetTool` emits) are picked up alongside
+ *  flat `nupkg/*.nupkg` files. Dotfiles are skipped at every level.
+ *  Directories themselves are not attached — only files. */
 export const collectAssets = (dirs: string[]): string[] => {
   const files: string[] = [];
   for (const dir of dirs) {
@@ -83,10 +94,19 @@ export const collectAssets = (dirs: string[]): string[] => {
       process.stderr.write(`[gh-release-create] skipping missing dir: ${dir}\n`);
       continue;
     }
-    for (const name of readdirSync(dir)) {
-      const path = resolve(dir, name);
-      if (name.startsWith('.')) continue;
-      files.push(path);
+    // `readdirSync(dir, { recursive: true, withFileTypes: true })`
+    // returns `Dirent`s whose `parentPath` is the absolute directory
+    // containing the entry. Filter to regular files (skip directories
+    // and symlinks) and drop anything under a dotfile / dot-directory
+    // path segment.
+    for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const parent = (entry as unknown as { parentPath?: string; path?: string }).parentPath
+        ?? (entry as unknown as { path?: string }).path
+        ?? dir;
+      const rel = resolve(parent, entry.name).slice(dir.length + 1);
+      if (rel.split('/').some((seg) => seg.startsWith('.'))) continue;
+      files.push(resolve(parent, entry.name));
     }
   }
   return files;
@@ -130,7 +150,10 @@ export const renderReleaseNotes = (
 };
 
 /** Entry point — write the notes file, then invoke `gh release
- *  create`. */
+ *  create`. Idempotent: if a release + tag for `v<version>` already
+ *  exist (a re-run of the workflow on the same SHA), the prior
+ *  release + tag are deleted and re-cut so the assets attached match
+ *  the current run. */
 export const main = async (argv: string[]): Promise<void> => {
   const opts = parseOptions(argv);
 
@@ -144,10 +167,22 @@ export const main = async (argv: string[]): Promise<void> => {
     writeFileSync(notesFile, notes, 'utf8');
   }
 
+  const tag = `v${opts.version}`;
+
+  // Idempotency guard — `gh release create` errors when the tag or
+  // release already exists. Silently swallow the "no such release"
+  // return by checking existence first, then delete both the release
+  // and the underlying tag so the fresh `create` below starts clean.
+  await run('sh', [
+    '-c',
+    `gh release view ${tag} --repo ${opts.repo} >/dev/null 2>&1 && ` +
+      `gh release delete ${tag} --repo ${opts.repo} --yes --cleanup-tag || true`,
+  ], { dryRun: opts.dryRun, cwd: repoRoot });
+
   const args = [
     'release',
     'create',
-    `v${opts.version}`,
+    tag,
     '--repo',
     opts.repo,
     '--title',
@@ -155,8 +190,11 @@ export const main = async (argv: string[]): Promise<void> => {
     '--notes-file',
     notesFile,
     '--prerelease',
-    ...assets,
   ];
+  if (opts.target) {
+    args.push('--target', opts.target);
+  }
+  args.push(...assets);
   await run('gh', args, { dryRun: opts.dryRun, cwd: repoRoot });
 };
 
