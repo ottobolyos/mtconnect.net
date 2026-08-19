@@ -71,22 +71,38 @@ export const main = async (argv: string[]): Promise<void> => {
     throw new Error(`No .nupkg files found in ${opts.input}`);
   }
 
+  // The API key is passed to `dotnet nuget push` via a spawn `env:`
+  // variable and expanded inside a `sh -c` wrapper. The parent
+  // process's argv holds `sh -c "…$NUGET_API_KEY"` — the literal
+  // key never appears there, so a wrapper like our `renderCmd()`
+  // (or an inspection of the parent's argv on the runner) cannot
+  // leak it. shell.ts's SECRET_ARG_NAMES redaction covers the CI
+  // log line as a second line of defence.
   for (const pkg of packages) {
     const path = resolve(opts.input, pkg);
-    const args = [
+    const cmdParts = [
+      'dotnet',
       'nuget',
       'push',
-      path,
+      shellQuote(path),
       '--source',
-      opts.source,
+      shellQuote(opts.source),
       '--skip-duplicate',
     ];
     if (opts.apiKey) {
-      args.push('--api-key', opts.apiKey);
+      cmdParts.push('--api-key', '"$NUGET_API_KEY"');
     }
-    await run('dotnet', args, { dryRun: opts.dryRun });
+    await run('sh', ['-c', cmdParts.join(' ')], {
+      dryRun: opts.dryRun,
+      env: opts.apiKey ? { NUGET_API_KEY: opts.apiKey } : undefined,
+    });
   }
 };
+
+/** Shell-safe quote — single-quotes with any embedded single-quote
+ *  escaped as `'\''`. Used only for interpolation into the `sh -c`
+ *  string above so a package path containing spaces round-trips. */
+const shellQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
 const invokedDirectly = (() => {
   const entry = process.argv[1];
