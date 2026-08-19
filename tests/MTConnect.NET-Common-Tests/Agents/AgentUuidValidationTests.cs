@@ -2,6 +2,7 @@
 // TrakHound Inc. licenses this file to you under the MIT license.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using MTConnect.Agents;
 using MTConnect.Configurations;
@@ -150,6 +151,43 @@ namespace MTConnect.Tests.Common.Agents
 
             Assert.That(ok, Is.True);
             Assert.That(normalized, Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// <see cref="DeterministicAgentUuid.TryValidate"/> also accepts the
+        /// hex-braced "X" format (<c>{0xhh,0xhh,0xhh,{...}}</c>) that
+        /// <see cref="Guid.TryParse(string, out Guid)"/> recognises, and
+        /// normalises it to the canonical hyphenated "D" form. Closes the
+        /// last Guid-format enum arm not covered by the sibling test.
+        /// </summary>
+        [Test]
+        public void TryValidate_hex_braced_X_format_normalizes_to_hyphenated()
+        {
+            const string XForm = "{0x6ba7b810,0x9dad,0x11d1,{0x80,0xb4,0x00,0xc0,0x4f,0xd4,0x30,0xc8}}";
+            const string Expected = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+            var ok = DeterministicAgentUuid.TryValidate(XForm, out var normalized);
+
+            Assert.That(ok, Is.True);
+            Assert.That(normalized, Is.EqualTo(Expected));
+        }
+
+        /// <summary>
+        /// <see cref="DeterministicAgentUuid.TryValidate"/> accepts uppercase
+        /// hex characters (case-insensitive per RFC 4122) and normalises the
+        /// output to lowercase so the wire representation is stable regardless
+        /// of the operator's typing.
+        /// </summary>
+        [Test]
+        public void TryValidate_uppercase_hex_is_normalised_to_lowercase()
+        {
+            const string Uppercased = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8";
+            const string Expected   = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+            var ok = DeterministicAgentUuid.TryValidate(Uppercased, out var normalized);
+
+            Assert.That(ok, Is.True);
+            Assert.That(normalized, Is.EqualTo(Expected));
         }
 
         // ------------------------------------------------------------------
@@ -333,6 +371,474 @@ namespace MTConnect.Tests.Common.Agents
             var expectedDerived = DeterministicAgentUuid.Derive(ServiceName, hostname, port: 0);
             Assert.That(persisted.Uuid, Is.EqualTo(expectedDerived),
                 "Persisted UUID must equal the deterministic derivation for the given ServiceName.");
+        }
+
+        // ------------------------------------------------------------------
+        // Warn-delegate contract — invocation count, message shape, both
+        // arms of the "persisted" vs "derived" fallback-kind switch, and
+        // the null-delegate no-op guard.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// When Path 1 (operator override) wins, the warn delegate must NOT
+        /// be invoked — the happy path is silent by design so a valid
+        /// operator configuration does not pollute the log with warnings.
+        /// </summary>
+        [Test]
+        public void Warn_delegate_not_invoked_when_operator_override_is_valid()
+        {
+            var messages = new List<string>();
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo("6ba7b810-9dad-11d1-80b4-00c04fd430c8"));
+            Assert.That(messages, Is.Empty,
+                "Path 1 (valid override) must be silent — no warn.");
+        }
+
+        /// <summary>
+        /// When Path 1 is null and Path 2 (persisted) wins, the warn delegate
+        /// must NOT be invoked — an empty override + valid persisted is the
+        /// normal warm-boot happy path.
+        /// </summary>
+        [Test]
+        public void Warn_delegate_not_invoked_when_override_null_and_persisted_valid()
+        {
+            var messages = new List<string>();
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: null,
+                persistedUuid: "cfbff0d1-9375-5685-968a-48ce8b50a653",
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo("cfbff0d1-9375-5685-968a-48ce8b50a653"));
+            Assert.That(messages, Is.Empty,
+                "Path 2 (valid persisted, null override) must be silent — no warn.");
+        }
+
+        /// <summary>
+        /// When Path 1 is null AND Path 2 is null (both truly empty — the
+        /// fresh-boot case), the warn delegate must NOT be invoked — both
+        /// early-return guards are gated on <c>!IsNullOrEmpty(...)</c>.
+        /// </summary>
+        [TestCase(null, null)]
+        [TestCase("", null)]
+        [TestCase(null, "")]
+        [TestCase("", "")]
+        public void Warn_delegate_not_invoked_when_both_override_and_persisted_are_empty(
+            string? overrideValue, string? persistedValue)
+        {
+            var messages = new List<string>();
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: overrideValue,
+                persistedUuid: persistedValue,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo(DeterministicAgentUuid.Derive("test-agent", "test-host", 0)));
+            Assert.That(messages, Is.Empty,
+                "Both empty ≠ malformed; fresh boot must be silent.");
+        }
+
+        /// <summary>
+        /// When Path 1 is rejected and Path 2 (persisted) is a valid UUID,
+        /// the warn message must name "persisted" as the fallback kind — the
+        /// operator learns which alternative source overrode their supplied
+        /// value. Pins the "persisted" arm of the two-arm fallback-kind
+        /// ternary in <see cref="AgentUuidResolver.Resolve"/>.
+        /// </summary>
+        [Test]
+        public void Warn_message_names_persisted_when_override_bad_and_persisted_valid()
+        {
+            var messages = new List<string>();
+            const string Malformed = "not-a-uuid";
+            const string ValidPersisted = "cfbff0d1-9375-5685-968a-48ce8b50a653";
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: Malformed,
+                persistedUuid: ValidPersisted,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo(ValidPersisted));
+            Assert.That(messages, Has.Count.EqualTo(1),
+                "One warn — for the rejected operator override; the valid persisted UUID needs no warn.");
+            Assert.That(messages[0], Does.Contain("AgentUuid override"));
+            Assert.That(messages[0], Does.Contain(Malformed));
+            Assert.That(messages[0], Does.Contain("falling back to persisted UUID"));
+        }
+
+        /// <summary>
+        /// When Path 1 is rejected and Path 2 (persisted) is also rejected /
+        /// null, the warn message for the operator override must name
+        /// "derived" as the fallback kind. Pins the "derived" arm of the
+        /// two-arm fallback-kind ternary in
+        /// <see cref="AgentUuidResolver.Resolve"/>.
+        /// </summary>
+        [Test]
+        public void Warn_message_names_derived_when_override_bad_and_persisted_absent()
+        {
+            var messages = new List<string>();
+            const string Malformed = "not-a-uuid";
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: Malformed,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo(DeterministicAgentUuid.Derive("test-agent", "test-host", 0)));
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Contain("AgentUuid override"));
+            Assert.That(messages[0], Does.Contain("falling back to derived UUID"));
+        }
+
+        /// <summary>
+        /// When Path 1 (operator override) is rejected AND Path 2 (persisted
+        /// state) is rejected — the failing-both case a mid-life container
+        /// upgrade produces — the warn delegate must be invoked TWICE, once
+        /// per rejected source. Guards against a regression that swallows
+        /// the second warn under the first.
+        /// </summary>
+        [Test]
+        public void Warn_delegate_invoked_twice_when_both_override_and_persisted_are_malformed()
+        {
+            var messages = new List<string>();
+            const string BadOverride  = "not-a-uuid";
+            const string BadPersisted = "also-not-a-uuid";
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: BadOverride,
+                persistedUuid: BadPersisted,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo(DeterministicAgentUuid.Derive("test-agent", "test-host", 0)));
+            Assert.That(messages, Has.Count.EqualTo(2),
+                "Two rejected sources → two warns; the second must not be swallowed.");
+            Assert.That(messages[0], Does.Contain("AgentUuid override"));
+            Assert.That(messages[0], Does.Contain(BadOverride));
+            Assert.That(messages[0], Does.Contain("falling back to derived UUID"));
+            Assert.That(messages[1], Does.Contain("Persisted AgentUuid"));
+            Assert.That(messages[1], Does.Contain("falling back to derived UUID"));
+        }
+
+        /// <summary>
+        /// When Path 1 (operator override) is absent and Path 2 (persisted
+        /// state) is rejected, only the persisted-state warn is emitted —
+        /// the operator did not supply anything to warn about.
+        /// </summary>
+        [Test]
+        public void Warn_delegate_emits_persisted_warn_only_when_override_null_and_persisted_bad()
+        {
+            var messages = new List<string>();
+            const string BadPersisted = "also-not-a-uuid";
+
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: null,
+                persistedUuid: BadPersisted,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(resolved, Is.EqualTo(DeterministicAgentUuid.Derive("test-agent", "test-host", 0)));
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Contain("Persisted AgentUuid"));
+            Assert.That(messages[0], Does.Not.Contain("override"),
+                "No override supplied → the override-warn must NOT be emitted.");
+        }
+
+        /// <summary>
+        /// A null <c>warn</c> delegate is valid — the resolver documents it
+        /// as "optional" and callers that do not want warnings must not
+        /// crash. Guards against a null-conditional invocation regression.
+        /// </summary>
+        [Test]
+        public void Null_warn_delegate_does_not_throw_on_either_rejection_path()
+        {
+            Assert.DoesNotThrow(() =>
+            {
+                _ = AgentUuidResolver.Resolve(
+                    operatorSuppliedUuid: "not-a-uuid",
+                    persistedUuid: "also-not-a-uuid",
+                    agentName: "test-agent",
+                    hostname: "test-host",
+                    warn: null);
+            });
+        }
+
+        /// <summary>
+        /// The <c>warn</c> parameter defaults to <see langword="null"/> —
+        /// callers that omit it entirely must get the same no-throw
+        /// behaviour as an explicitly-null delegate.
+        /// </summary>
+        [Test]
+        public void Default_warn_argument_omitted_does_not_throw()
+        {
+            Assert.DoesNotThrow(() =>
+            {
+                _ = AgentUuidResolver.Resolve(
+                    operatorSuppliedUuid: "not-a-uuid",
+                    persistedUuid: "also-not-a-uuid",
+                    agentName: "test-agent",
+                    hostname: "test-host");
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // SanitiseForLog — CRLF stripping (log-injection guard) and
+        // truncation-at-boundary behaviour (secret-leakage guard). Exercised
+        // indirectly via the operator-override warn message content, which
+        // is the only route that pipes user input through the sanitiser.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// <c>SanitiseForLog</c> strips CR and LF characters from operator
+        /// input before it appears in the warn message — defends against
+        /// log-injection (forged log lines) where a hostile operator embeds
+        /// <c>\r\n</c> in the config file.
+        /// </summary>
+        [Test]
+        public void Warn_message_strips_CR_LF_from_operator_supplied_value()
+        {
+            var messages = new List<string>();
+            const string Injected = "bad-uuid\r\nFAKE-LOG-LINE-INJECTED";
+
+            _ = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: Injected,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Not.Contain("\r"));
+            Assert.That(messages[0], Does.Not.Contain("\n"));
+            Assert.That(messages[0], Does.Contain("bad-uuidFAKE-LOG-LINE-INJECTED"),
+                "CR and LF must be stripped inline — surrounding characters remain.");
+        }
+
+        /// <summary>
+        /// <c>SanitiseForLog</c> strips a lone CR (Mac Classic line-ending)
+        /// as well as CRLF pairs. Pins the guard against callers that split
+        /// on either terminator.
+        /// </summary>
+        [Test]
+        public void Warn_message_strips_lone_CR_from_operator_supplied_value()
+        {
+            var messages = new List<string>();
+            const string Injected = "bad\rvalue";
+
+            _ = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: Injected,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Not.Contain("\r"));
+            Assert.That(messages[0], Does.Contain("badvalue"));
+        }
+
+        /// <summary>
+        /// <c>SanitiseForLog</c> strips a lone LF as well, matching the
+        /// symmetric CR treatment.
+        /// </summary>
+        [Test]
+        public void Warn_message_strips_lone_LF_from_operator_supplied_value()
+        {
+            var messages = new List<string>();
+            const string Injected = "bad\nvalue";
+
+            _ = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: Injected,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Not.Contain("\n"));
+            Assert.That(messages[0], Does.Contain("badvalue"));
+        }
+
+        /// <summary>
+        /// <c>SanitiseForLog</c> does NOT truncate values at or below the
+        /// 64-character <c>LogValueMaxLength</c> boundary — pins the exact
+        /// boundary against off-by-one regressions on the length check.
+        /// </summary>
+        [Test]
+        public void Warn_message_does_not_truncate_at_exactly_max_length()
+        {
+            var messages = new List<string>();
+            // Exactly 64 chars, none of which is a valid UUID character
+            // pattern → guaranteed rejection by TryValidate.
+            var input = new string('z', 64);
+
+            _ = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: input,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Contain(input),
+                "A value at exactly the boundary must appear verbatim.");
+            Assert.That(messages[0], Does.Not.Contain("…"),
+                "No ellipsis must be appended at exactly the boundary.");
+        }
+
+        /// <summary>
+        /// <c>SanitiseForLog</c> truncates values longer than 64 characters
+        /// and appends a single ellipsis (…) so the operator sees the
+        /// prefix but a leaked API-key-length string is not archived in
+        /// full. Pins the 65-char over-boundary case.
+        /// </summary>
+        [Test]
+        public void Warn_message_truncates_over_max_length_with_ellipsis()
+        {
+            var messages = new List<string>();
+            // 65 chars, one over the boundary.
+            var input = new string('z', 65);
+
+            _ = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: input,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Contain(new string('z', 64) + "…"),
+                "The first 64 characters must be preserved and an ellipsis appended.");
+            Assert.That(messages[0], Does.Not.Contain(new string('z', 65)),
+                "The full 65-character input must NOT appear verbatim.");
+        }
+
+        /// <summary>
+        /// <c>SanitiseForLog</c>'s truncation applies AFTER CRLF stripping —
+        /// a value whose raw length is over the boundary but whose stripped
+        /// length falls within it must NOT be truncated. Pins the compose
+        /// order of the two sanitiser steps.
+        /// </summary>
+        [Test]
+        public void Warn_message_measures_length_after_CRLF_stripping()
+        {
+            var messages = new List<string>();
+            // 64 z's interleaved with 10 CRLFs (raw length 84, stripped length 64).
+            var input = new string('z', 64) + "\r\n\r\n\r\n\r\n\r\n";
+
+            _ = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: input,
+                persistedUuid: null,
+                agentName: "test-agent",
+                hostname: "test-host",
+                warn: messages.Add);
+
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Contain(new string('z', 64)));
+            Assert.That(messages[0], Does.Not.Contain("…"),
+                "Length is measured after CRLF stripping — no ellipsis needed here.");
+        }
+
+        // ------------------------------------------------------------------
+        // Path-3 hostname fallback — the agentName-is-null / empty case
+        // routes through DeterministicAgentUuid.Derive's own fallback.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// When Path 3 is reached and <c>agentName</c> is <see langword="null"/>,
+        /// the hostname stands in as the seed component per
+        /// <see cref="DeterministicAgentUuid.Derive"/>'s documented fallback.
+        /// The output is stable, deterministic, and identical to
+        /// <c>Derive(hostname, hostname, 0)</c>.
+        /// </summary>
+        [TestCase(null)]
+        [TestCase("")]
+        public void Resolve_falls_back_to_hostname_when_agentName_is_null_or_empty(string? agentName)
+        {
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: null,
+                persistedUuid: null,
+                agentName: agentName,
+                hostname: "canonical-host",
+                warn: null);
+
+            var expected = DeterministicAgentUuid.Derive(agentName, "canonical-host", 0);
+            Assert.That(resolved, Is.EqualTo(expected));
+            // Cross-check: Derive(null, host, 0) == Derive(host, host, 0).
+            var expectedViaHost = DeterministicAgentUuid.Derive("canonical-host", "canonical-host", 0);
+            Assert.That(resolved, Is.EqualTo(expectedViaHost),
+                "agentName null/empty ⇒ Derive seeds with hostname; outputs must match.");
+        }
+
+        // ------------------------------------------------------------------
+        // Persisted-path failure integration — the malformed persisted UUID
+        // is not just a synthetic string parameter, it MUST round-trip
+        // through the real MTConnectAgentInformation.Save/Read (JSON file
+        // on disk) and still be rejected by the resolver. Guards against a
+        // regression that only tests the in-memory path.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// End-to-end integration: a malformed UUID string is written to
+        /// <c>agent.information.json</c> via
+        /// <see cref="MTConnectAgentInformation.Save"/>, read back via the
+        /// real <see cref="MTConnectAgentInformation.Read"/>, and rejected
+        /// by <see cref="AgentUuidResolver.Resolve"/> which falls through
+        /// to the derived UUID. Confirms the failure path is exercised
+        /// through the real serialiser, not just an in-memory string.
+        /// </summary>
+        [Test]
+        public void Malformed_persisted_state_survives_JSON_round_trip_and_is_rejected()
+        {
+            const string MalformedPersisted = "definitely-not-a-uuid-42";
+            const string ServiceName = "test-agent-json-round-trip";
+            var hostname = Environment.MachineName;
+
+            // Write malformed value to disk via the production serialiser.
+            var toPersist = new MTConnectAgentInformation(MalformedPersisted);
+            toPersist.Save();
+
+            // Verify the JSON on disk actually contains the malformed value —
+            // guards against a silent Save-side validator that never existed
+            // but might be added later without failing the harness.
+            var raw = File.ReadAllText(_stateFilePath);
+            Assert.That(raw, Does.Contain(MalformedPersisted),
+                "Precondition: the malformed value must actually be on disk.");
+
+            // Read back via the production reader and hand its Uuid to Resolve.
+            var reread = MTConnectAgentInformation.Read();
+            Assert.That(reread, Is.Not.Null);
+            Assert.That(reread!.Uuid, Is.EqualTo(MalformedPersisted),
+                "Precondition: the reader must surface the malformed value verbatim.");
+
+            var messages = new List<string>();
+            var resolved = AgentUuidResolver.Resolve(
+                operatorSuppliedUuid: null,
+                persistedUuid: reread.Uuid,
+                agentName: ServiceName,
+                hostname: hostname,
+                warn: messages.Add);
+
+            var expectedDerived = DeterministicAgentUuid.Derive(ServiceName, hostname, port: 0);
+            Assert.That(resolved, Is.EqualTo(expectedDerived));
+            Assert.That(messages, Has.Count.EqualTo(1));
+            Assert.That(messages[0], Does.Contain("Persisted AgentUuid"));
         }
 
         // ------------------------------------------------------------------
