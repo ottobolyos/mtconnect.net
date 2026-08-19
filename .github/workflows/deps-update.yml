@@ -20,7 +20,7 @@ name: deps-update
 # window is excluded automatically. NuGet does NOT enforce the
 # quarantine: `dotnet-outdated` has no built-in age filter, so NuGet
 # bumps rely on downstream CI + review to catch a hot-published bad
-# release. Adding a NuGet quarantine is tracked as a follow-up.
+# release. Adding a NuGet quarantine is tracked in issue #237.
 #
 # A prior npm+NuGet PR that is still open when the workflow re-fires
 # is closed as superseded — only one bulk PR from this workflow is
@@ -139,7 +139,7 @@ jobs:
       #    NuGet bumps do NOT participate in the MIN_AGE_DAYS
       #    quarantine — downstream CI + reviewer eyes are the only
       #    protection against a hot-published bad release. Adding a
-      #    proper quarantine is tracked as a follow-up.
+      #    proper quarantine is tracked in issue #237.
       # ------------------------------------------------------------
       - name: Bump NuGet package versions
         run: |
