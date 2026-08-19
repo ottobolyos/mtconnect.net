@@ -21,12 +21,34 @@ namespace MTConnect
 
         public static string Get(string xml)
         {
-            var doc = new XmlDocument();
-            doc.LoadXml(xml);
-            if (doc != null && doc.DocumentElement != null)
+            if (string.IsNullOrEmpty(xml)) return null;
+
+            // XmlDocument.LoadXml delegates to an internal XmlReader whose
+            // DtdProcessing default varies across TFMs and whose XmlResolver
+            // historically resolved external entities. Route the parse through
+            // an explicit XmlReader with DTD processing prohibited and no
+            // resolver so unknown or hostile documents cannot exercise
+            // external-entity or entity-expansion (billion-laughs) paths.
+            var settings = new XmlReaderSettings
             {
-                return doc.DocumentElement.NamespaceURI;
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+            };
+
+            try
+            {
+                using (var stringReader = new StringReader(xml))
+                using (var xmlReader = XmlReader.Create(stringReader, settings))
+                {
+                    var doc = new XmlDocument { XmlResolver = null };
+                    doc.Load(xmlReader);
+                    if (doc.DocumentElement != null)
+                    {
+                        return doc.DocumentElement.NamespaceURI;
+                    }
+                }
             }
+            catch (XmlException) { }
 
             return null;
         }
