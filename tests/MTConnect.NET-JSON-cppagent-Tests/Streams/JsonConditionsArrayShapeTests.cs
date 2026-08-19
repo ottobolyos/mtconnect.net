@@ -430,6 +430,146 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
         }
 
         /// <summary>
+        /// Regression pin for the intentional drop of strict unknown-level
+        /// wrapper rejection. Pre-7.0 the custom converter threw a
+        /// <c>JsonException</c> naming the unknown level on any array
+        /// entry with a property name outside the set
+        /// {Fault, Warning, Normal, Unavailable}. After the structural
+        /// rewrite the default deserializer silently ignores unknown
+        /// property names on <see cref="JsonConditionWrapper"/>: the
+        /// wrapper is materialized with every level property null, so
+        /// <see cref="JsonConditionWrapper.Value"/>,
+        /// <see cref="JsonConditionWrapper.Level"/>, and
+        /// <see cref="JsonConditionWrapper.ToObservation"/> all return
+        /// null. A future change that reintroduced strict rejection (for
+        /// example via a custom converter or an
+        /// <c>UnmappedMemberHandling.Disallow</c> serializer option)
+        /// would flip this test to expect the exception; that is a
+        /// wire-shape contract change and should be caught here.
+        /// </summary>
+        [Test]
+        public void Deserialize_unknown_level_property_is_silently_ignored()
+        {
+            const string wire =
+                "[{\"Bogus\":{\"dataItemId\":\"x1\"}}," +
+                 "{\"Fault\":{\"dataItemId\":\"f1\"}}]";
+
+            var conditions = JsonSerializer.Deserialize<JsonConditions>(wire);
+
+            Assert.That(conditions, Is.Not.Null);
+            Assert.That(conditions!.Count, Is.EqualTo(2));
+
+            // First wrapper — unknown "Bogus" is silently dropped, all four
+            // known-level properties remain null.
+            var bogus = conditions[0];
+            Assert.That(bogus.Fault,       Is.Null);
+            Assert.That(bogus.Warning,     Is.Null);
+            Assert.That(bogus.Normal,      Is.Null);
+            Assert.That(bogus.Unavailable, Is.Null);
+            Assert.That(bogus.Value,       Is.Null);
+            Assert.That(bogus.Level,       Is.Null);
+            Assert.That(bogus.ToObservation(), Is.Null);
+
+            // Second wrapper — known "Fault" still populates correctly.
+            Assert.That(conditions[1].Fault, Is.Not.Null);
+            Assert.That(conditions[1].Fault!.DataItemId, Is.EqualTo("f1"));
+
+            // Observations accessor skips the empty first wrapper.
+            Assert.That(conditions.Observations.Count, Is.EqualTo(1));
+            Assert.That(conditions.Observations[0].DataItemId, Is.EqualTo("f1"));
+        }
+
+        /// <summary>
+        /// Failure-path pin for a non-array root token (number, string,
+        /// bool). The default <see cref="List{T}"/> deserializer accepts
+        /// only <c>[</c> and <c>null</c>; any other root token yields a
+        /// <see cref="JsonException"/>. This mirrors the removed
+        /// converter's <c>"Unexpected token '...' when reading
+        /// JsonConditions; expected array, object, or null."</c> branch
+        /// for the non-object case (v1 object-shape acceptance is
+        /// separately regression-pinned as a drop).
+        /// </summary>
+        [TestCase("123")]
+        [TestCase("\"fault\"")]
+        [TestCase("true")]
+        [TestCase("false")]
+        public void Deserialize_non_array_root_throws_JsonException(string wire)
+        {
+            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<JsonConditions>(wire));
+        }
+
+        /// <summary>
+        /// Failure-path pin for a scalar element inside the wire array
+        /// (e.g. <c>[123]</c>, <c>["fault"]</c>). The default
+        /// <see cref="List{T}"/> deserializer requires each element to
+        /// parse as <see cref="JsonConditionWrapper"/>, which for scalar
+        /// tokens throws <see cref="JsonException"/>. Mirrors the removed
+        /// converter's <c>"Unexpected token '...' inside JsonConditions
+        /// array; expected object wrapper."</c> branch.
+        /// </summary>
+        [TestCase("[123]")]
+        [TestCase("[\"fault\"]")]
+        [TestCase("[true]")]
+        [TestCase("[[]]")]
+        public void Deserialize_scalar_or_array_element_throws_JsonException(string wire)
+        {
+            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<JsonConditions>(wire));
+        }
+
+        /// <summary>
+        /// Failure-path pin for malformed / truncated JSON. Broken input
+        /// bytes surface as a <see cref="JsonException"/> from the
+        /// default S.T.J parser; no silent-fallback empty-list result.
+        /// </summary>
+        [TestCase("[")]
+        [TestCase("[{\"Fault\":")]
+        [TestCase("[{\"Fault\":{\"dataItemId\":\"f1\"}")]
+        [TestCase("not-json-at-all")]
+        public void Deserialize_malformed_wire_throws_JsonException(string wire)
+        {
+            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<JsonConditions>(wire));
+        }
+
+        /// <summary>
+        /// Round-trip pin for each of the four
+        /// <see cref="ConditionLevel"/> enum arms individually: a
+        /// single-wrapper conditions list at each level serializes to a
+        /// one-key envelope on the wire and deserializes back to the
+        /// same wrapper populated on the matching property with the
+        /// other three null. Enum-arm exhaustiveness pin per the coverage
+        /// FLOOR (§1.0d-trigies-novodecies).
+        /// </summary>
+        [TestCase("Fault")]
+        [TestCase("Warning")]
+        [TestCase("Normal")]
+        [TestCase("Unavailable")]
+        public void RoundTrip_single_level_wrapper_preserves_level(string levelName)
+        {
+            var wrapper = levelName switch
+            {
+                "Fault"       => JsonConditionWrapper.OfFault      (MakeEntry("x1", "TEMPERATURE")),
+                "Warning"     => JsonConditionWrapper.OfWarning    (MakeEntry("x1", "TEMPERATURE")),
+                "Normal"      => JsonConditionWrapper.OfNormal     (MakeEntry("x1", "TEMPERATURE")),
+                "Unavailable" => JsonConditionWrapper.OfUnavailable(MakeEntry("x1", "TEMPERATURE")),
+                _             => throw new System.ArgumentOutOfRangeException(nameof(levelName)),
+            };
+            var original = new JsonConditions { wrapper };
+
+            var json = JsonSerializer.Serialize(original, SparseOptions());
+            var parsed = JsonSerializer.Deserialize<JsonConditions>(json);
+
+            Assert.That(parsed, Is.Not.Null);
+            Assert.That(parsed!.Count, Is.EqualTo(1));
+            Assert.That(parsed[0].Level, Is.EqualTo(levelName));
+            Assert.That(parsed[0].Value!.DataItemId, Is.EqualTo("x1"));
+
+            // Re-emit and confirm byte-identity with the first pass, so
+            // the round-trip is symmetric on every level arm.
+            var json2 = JsonSerializer.Serialize(parsed, SparseOptions());
+            Assert.That(json2, Is.EqualTo(json));
+        }
+
+        /// <summary>
         /// Regression pin for the intentional drop of strict single-key
         /// wrapper validation. Pre-7.0 the custom converter rejected
         /// multi-key wrapper envelopes with a named

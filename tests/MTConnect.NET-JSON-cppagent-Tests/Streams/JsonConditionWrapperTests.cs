@@ -193,6 +193,59 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             Assert.That(JsonConditionWrapper.OfUnavailable(NewCondition("u1")).Level, Is.EqualTo("Unavailable"));
         }
 
+        /// <summary>
+        /// Pins the Fault > Warning > Normal > Unavailable precedence on the
+        /// <see cref="JsonConditionWrapper.Level"/> accessor for
+        /// multi-populated wrappers, mirroring the
+        /// <see cref="JsonConditionWrapper.Value"/> precedence pin. This is
+        /// a distinct accessor with its own selection logic; a future
+        /// refactor that changed one accessor's precedence but not the
+        /// other would silently break wire-shape assumptions on the read
+        /// side.
+        /// </summary>
+        [Test]
+        public void Level_precedence_is_Fault_Warning_Normal_Unavailable()
+        {
+            var f = NewCondition("f1");
+            var w = NewCondition("w1");
+            var n = NewCondition("n1");
+            var u = NewCondition("u1");
+
+            Assert.That(new JsonConditionWrapper { Fault = f, Warning = w, Normal = n, Unavailable = u }.Level, Is.EqualTo("Fault"));
+            Assert.That(new JsonConditionWrapper {              Warning = w, Normal = n, Unavailable = u }.Level, Is.EqualTo("Warning"));
+            Assert.That(new JsonConditionWrapper {                           Normal = n, Unavailable = u }.Level, Is.EqualTo("Normal"));
+            Assert.That(new JsonConditionWrapper {                                       Unavailable = u }.Level, Is.EqualTo("Unavailable"));
+        }
+
+        /// <summary>
+        /// Pins the Fault > Warning > Normal > Unavailable precedence on
+        /// <see cref="JsonConditionWrapper.ToObservation"/> for
+        /// multi-populated wrappers: the materialized observation carries
+        /// the highest-precedence level's DataItemId and level enum,
+        /// matching <see cref="JsonConditionWrapper.Value"/> /
+        /// <see cref="JsonConditionWrapper.Level"/>.
+        /// </summary>
+        [Test]
+        public void ToObservation_precedence_is_Fault_Warning_Normal_Unavailable()
+        {
+            var f = NewCondition("f1", "TEMPERATURE");
+            var w = NewCondition("w1", "POSITION");
+            var n = NewCondition("n1", "AVAILABILITY");
+            var u = NewCondition("u1", "ROTATION");
+
+            var faultWins = new JsonConditionWrapper { Fault = f, Warning = w, Normal = n, Unavailable = u }.ToObservation();
+            Assert.That(faultWins!.DataItemId, Is.EqualTo("f1"));
+            Assert.That((faultWins as MTConnect.Observations.IConditionObservation)!.Level, Is.EqualTo(MTConnect.Observations.ConditionLevel.FAULT));
+
+            var warningWins = new JsonConditionWrapper { Warning = w, Normal = n, Unavailable = u }.ToObservation();
+            Assert.That(warningWins!.DataItemId, Is.EqualTo("w1"));
+            Assert.That((warningWins as MTConnect.Observations.IConditionObservation)!.Level, Is.EqualTo(MTConnect.Observations.ConditionLevel.WARNING));
+
+            var normalWins = new JsonConditionWrapper { Normal = n, Unavailable = u }.ToObservation();
+            Assert.That(normalWins!.DataItemId, Is.EqualTo("n1"));
+            Assert.That((normalWins as MTConnect.Observations.IConditionObservation)!.Level, Is.EqualTo(MTConnect.Observations.ConditionLevel.NORMAL));
+        }
+
         // ------------------------------------------------------------------
         // ToObservation — materializes the single non-null level into a
         // strongly-typed ConditionObservation at the matching level enum.
