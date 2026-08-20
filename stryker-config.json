@@ -3,12 +3,20 @@
 // MTConnect.NET-Common-Tests suite, at PR #233 head 43497c5d, Stryker.NET
 // v4.16.0 with the Regex mutator ignored).
 //
-// Thresholds pinned below the baseline so this PR does not regress and so
-// subsequent PRs inherit a pass-through gate until the dedicated coverage-
-// quality campaign raises the floor. See TrakHound/MTConnect.NET#242 for
-// the follow-up scope (phase-by-phase kill of the surviving mutants, then
-// raise thresholds in step to 20 -> 40 -> 60 -> 80%+, then expand Stryker
-// to the sibling assemblies).
+// Thresholds. `break: 5` and `low: 5` sit below the 7.75% baseline, so a
+// baseline-conforming run passes CI (Stryker exits non-zero only when the
+// score drops below `break`). `high: 8` sits deliberately ABOVE the
+// baseline as an aspirational marker — a baseline-conforming run reports
+// yellow (`low <= score < high`) rather than green, keeping visible
+// pressure on the follow-up campaign until the floor rises above `high`.
+// See TrakHound/MTConnect.NET#242 for the phase-by-phase plan
+// (categorise survivors -> kill by subsystem -> raise thresholds in step
+// to 20 -> 40 -> 60 -> 80%+ -> expand Stryker to sibling assemblies).
+//
+// Stryker.NET tool version is pinned in `.config/dotnet-tools.json`
+// alongside the thresholds so the 7.75% baseline stays reproducible; a
+// mutator-set change in a later Stryker release could shift the score
+// even against unchanged production code.
 //
 // JSONC (JSON with comments) is the Stryker.NET native config format;
 // leave these comments in place through subsequent edits.
