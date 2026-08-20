@@ -315,9 +315,9 @@ namespace MTConnect.Tests.Common.Configurations
         /// <summary>
         /// Pins Normalize idempotency: calling <see cref="AgentConfiguration.Normalize"/>
         /// a second time is a stable no-op — the DeviceValidationLevel value is the
-        /// mirrored value, not the ctor default. A regression that reset
-        /// <c>_isDeviceValidationLevelExplicit</c> inside Normalize (making the
-        /// mirror re-fire) would silently overwrite a subsequent explicit assignment;
+        /// mirrored value, not the ctor default. A regression that reset the
+        /// nullable backing field to null inside Normalize (making the mirror
+        /// re-fire) would silently overwrite a subsequent explicit assignment;
         /// pinning idempotency catches that class of bug.
         /// </summary>
         [Test]
@@ -338,19 +338,18 @@ namespace MTConnect.Tests.Common.Configurations
         /// <summary>
         /// Pins that setting <see cref="AgentConfiguration.InputValidationLevel"/>
         /// AFTER an explicit <see cref="AgentConfiguration.DeviceValidationLevel"/>
-        /// assignment does NOT re-arm the mirror. The
-        /// <c>_isDeviceValidationLevelExplicit</c> flag is set by the DVL setter
-        /// and never cleared by the IVL setter — a caller who explicitly set DVL
-        /// then later set IVL must not have DVL silently overwritten on the next
-        /// Normalize call.
+        /// assignment does NOT re-arm the mirror. The DVL setter populates the
+        /// nullable backing field to a non-null value and the IVL setter never
+        /// touches it — a caller who explicitly set DVL then later set IVL must
+        /// not have DVL silently overwritten on the next Normalize call.
         /// </summary>
         [Test]
         public void Normalize_Explicit_DeviceValidationLevel_Then_Later_InputValidationLevel_Assignment_Does_Not_Rearm_Mirror()
         {
             var config = new AgentConfiguration();
             config.DeviceValidationLevel = DeviceValidationLevel.Ignore;
-            // The DVL setter marked _isDeviceValidationLevelExplicit=true. Later IVL assignment
-            // must not clear that latch.
+            // The DVL setter populated the nullable backing field to non-null. Later
+            // IVL assignment must not reset it to null.
             config.InputValidationLevel = InputValidationLevel.Strict;
 
             config.Normalize();
@@ -362,8 +361,8 @@ namespace MTConnect.Tests.Common.Configurations
         /// <summary>
         /// Pins sticky suppression across every <see cref="DeviceValidationLevel"/> arm —
         /// the existing single-arm sticky-suppression test only covered
-        /// <c>Strict → Ignore</c>. A regression that clears <c>_isDeviceValidationLevelExplicit</c>
-        /// only on a specific arm (for example resetting the flag on the ctor default
+        /// <c>Strict → Ignore</c>. A regression that resets the nullable backing
+        /// field to null only on a specific arm (for example on the ctor-default
         /// arm) would slip past the single existing test.
         /// </summary>
         [TestCase(DeviceValidationLevel.Ignore)]

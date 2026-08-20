@@ -134,9 +134,21 @@ namespace MTConnect.Configurations
         [JsonPropertyName("enableValidation")]
         public bool EnableValidation { get; set; }
 
-        private DeviceValidationLevel _deviceValidationLevel;
-        private bool _isDeviceValidationLevelExplicit;
+        // Nullable backing field collapses the pre-fix pair (a non-nullable enum
+        // field plus a parallel `_isDeviceValidationLevelExplicit` boolean) into a
+        // single is-explicit-or-not signal: null means "no explicit assignment,
+        // the getter reports the ctor default and Normalize will mirror IVL onto
+        // it", non-null means "explicitly assigned, do not mirror". Dime cycle-1
+        // finding M1 (simplification).
+        private DeviceValidationLevel? _deviceValidationLevel;
         private InputValidationLevel _inputValidationLevel;
+
+        /// <summary>
+        /// Default Device (MTConnectDevices) validation level surfaced when no
+        /// explicit assignment has been made. Kept as a named constant so
+        /// getter, ctor, and Normalize agree on the same fallback.
+        /// </summary>
+        private const DeviceValidationLevel DeviceValidationLevelDefault = DeviceValidationLevel.Warning;
 
         /// <summary>
         /// Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict.
@@ -145,14 +157,14 @@ namespace MTConnect.Configurations
         /// When a configuration file omits this key the loader mirrors <see cref="InputValidationLevel"/>
         /// onto Device validation, preserving pre-v7 behaviour for consumers that only knew the single
         /// <see cref="InputValidationLevel"/> knob. Setting this property — either programmatically or via a
-        /// key present in the source document — marks the value as explicit and disables the mirror on the
-        /// next <see cref="Normalize"/>. An assignment whose ordinal is not a defined enum arm raises
-        /// <see cref="ArgumentOutOfRangeException"/>.
+        /// key present in the source document — latches the value as explicit (the nullable backing field
+        /// becomes non-null) and disables the mirror on the next <see cref="Normalize"/>. An assignment
+        /// whose ordinal is not a defined enum arm raises <see cref="ArgumentOutOfRangeException"/>.
         /// </remarks>
         [JsonPropertyName("deviceValidationLevel")]
         public DeviceValidationLevel DeviceValidationLevel
         {
-            get => _deviceValidationLevel;
+            get => _deviceValidationLevel ?? DeviceValidationLevelDefault;
             set
             {
                 if (!Enum.IsDefined(typeof(DeviceValidationLevel), value))
@@ -163,7 +175,6 @@ namespace MTConnect.Configurations
                         "DeviceValidationLevel must be one of Ignore (0), Warning (1), Remove (2), Strict (3).");
                 }
                 _deviceValidationLevel = value;
-                _isDeviceValidationLevelExplicit = true;
             }
         }
 
@@ -224,11 +235,13 @@ namespace MTConnect.Configurations
             ObservationBufferSize = 131072;
             AssetBufferSize = 1024;
             DefaultVersion = MTConnectVersions.Max;
-            // Assign the backing fields directly. Going through the public setter would flip
-            // _isDeviceValidationLevelExplicit and disable the load-time migration mirror.
-            _deviceValidationLevel = DeviceValidationLevel.Warning;
+            // Leave _deviceValidationLevel null. Going through the public setter would
+            // latch it as explicit and disable the load-time migration mirror; the
+            // getter falls back to DeviceValidationLevelDefault while the backing field
+            // is null, and Normalize's `??=` populates it from _inputValidationLevel
+            // during the load path.
+            _deviceValidationLevel = null;
             _inputValidationLevel = InputValidationLevel.Warning;
-            _isDeviceValidationLevelExplicit = false;
             AllowEmptyResultForEnumEvents = false;
             ConvertUnits = true;
             IgnoreObservationCase = false;
@@ -251,10 +264,12 @@ namespace MTConnect.Configurations
         /// </remarks>
         public void Normalize()
         {
-            if (!_isDeviceValidationLevelExplicit)
-            {
-                _deviceValidationLevel = (DeviceValidationLevel)(int)_inputValidationLevel;
-            }
+            // `??=` assigns the mirror only when the backing field is still null —
+            // i.e. neither a programmatic setter call nor a source-document key
+            // has latched DeviceValidationLevel to an explicit value. The
+            // sticky-suppression semantics (an explicit DVL assignment beats a
+            // later IVL change on the next Normalize) fall out of the null-check.
+            _deviceValidationLevel ??= (DeviceValidationLevel)(int)_inputValidationLevel;
         }
 
         /// <summary>
