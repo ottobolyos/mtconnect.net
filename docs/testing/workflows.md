@@ -96,6 +96,22 @@ package-write privileges.
   The sweep is opt-in via
   `dotnet test tests/Compliance/MTConnect-Compliance-Tests/MTConnect-Compliance-Tests.csproj --filter "Category=XsdLoadStrict"`.
 
+## CI workflow — `release-pack` (multi-TFM Release-pack gate)
+
+Sibling job in `.github/workflows/dotnet.yml`. Runs on every push to `master` and every non-draft PR. Executes `dotnet pack MTConnect.NET.sln -c Release` across the full net461 → net9.0 TFM matrix — a stricter surface than `build-test-coverage`, because Release configuration enables NuGet package generation (`.nupkg` + `.snupkg`), rich API doc surfaces on every TFM, and the multi-TFM `SupportedOSPlatform` / `LangVersion` gates the Debug matrix does not exercise.
+
+**Purpose:** guard against the class of regressions the 2026-05-22 landing bypassed — a Debug-only CI floor let CS-family Release-only diagnostics ship as PR-level warnings that only surfaced during release packaging. The gate turns every such regression into a red PR check.
+
+**Exit contract:** must be RC=0 (zero errors, zero CS/NU/CA/SYSLIB diagnostics) to merge. The remaining MSB3277 assembly-conflict + NETSDK1138 EOL-TFM + transitive-package net461-compat build-summary warnings are pre-existing and are not tracked by this gate; the FLOOR is only against new code-level diagnostics.
+
+**Local repro** (matches CI):
+
+```bash
+dotnet pack MTConnect.NET.sln -c Release
+```
+
+The command runs across every TFM configured in each project's `TargetFrameworks`. Failing quickly on net461 (the strictest TFM for `SupportedOSPlatform` / `LangVersion` guards) is the fastest sanity check when triaging a Release-only diagnostic locally.
+
 ## Why the integration project is a separate CI step
 
 The integration project drives the in-process Agent + embedded HTTP
