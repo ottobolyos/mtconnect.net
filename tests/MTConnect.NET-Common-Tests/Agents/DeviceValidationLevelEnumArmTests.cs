@@ -17,11 +17,11 @@ namespace MTConnect.NET_Common_Tests.Agents
     /// <see cref="DeviceValidationLevel"/> enum introduced by PR #219 commit
     /// 90daffca. That commit added the enum, an <c>AgentConfiguration.DeviceValidationLevel</c>
     /// property, and swapped every <c>InputValidationLevel</c> reference in
-    /// <see cref="MTConnectAgent.NormalizeDevice(IDevice)"/> to the new
+    /// <c>MTConnectAgent.NormalizeDevice(IDevice)</c> to the new
     /// <c>DeviceValidationLevel</c> — but shipped ZERO tests for any of the four
     /// enum arms on any of the three validation sites.
     ///
-    /// The three validation sites in <see cref="MTConnectAgent.NormalizeDevice"/>
+    /// The three validation sites in <c>MTConnectAgent.NormalizeDevice</c>
     /// (MTConnectAgent.cs:1315–1363) branch on <c>DeviceValidationLevel</c>:
     ///
     ///   * generic Component  →  Raise + optionally Remove / Strict-null
@@ -57,6 +57,14 @@ namespace MTConnect.NET_Common_Tests.Agents
         // enum-arm × site — the FLOOR grid. 4 arms × 3 sites = 12 tests.
         // -----------------------------------------------------------------
 
+        /// <summary>
+        /// Pins the generic-Component validation site: for each
+        /// <see cref="DeviceValidationLevel"/> arm, adding a Device whose
+        /// only invalid shape is a base-<see cref="Component"/> child takes
+        /// the documented branch — Ignore silently retains, Warning raises
+        /// once and retains, Remove raises once and drops the child, Strict
+        /// raises once and returns a null device.
+        /// </summary>
         [TestCase(DeviceValidationLevel.Ignore)]
         [TestCase(DeviceValidationLevel.Warning)]
         [TestCase(DeviceValidationLevel.Remove)]
@@ -105,6 +113,15 @@ namespace MTConnect.NET_Common_Tests.Agents
             }
         }
 
+        /// <summary>
+        /// Pins the generic-Composition validation site: for each
+        /// <see cref="DeviceValidationLevel"/> arm, adding a Device with a
+        /// base-<see cref="Composition"/> nested under a child Component
+        /// takes the documented branch — Ignore silently retains, Warning
+        /// raises once and retains, Remove raises once and drops the
+        /// nested Composition (F-TEST-BUG-1 fix), Strict raises once and
+        /// returns a null device.
+        /// </summary>
         [TestCase(DeviceValidationLevel.Ignore)]
         [TestCase(DeviceValidationLevel.Warning)]
         [TestCase(DeviceValidationLevel.Remove)]
@@ -152,6 +169,15 @@ namespace MTConnect.NET_Common_Tests.Agents
             }
         }
 
+        /// <summary>
+        /// Pins the generic-DataItem validation site: for each
+        /// <see cref="DeviceValidationLevel"/> arm, adding a Device with a
+        /// base-<see cref="DataItem"/> attached directly to Device.DataItems
+        /// takes the documented branch — Ignore silently retains, Warning
+        /// raises once and retains, Remove raises once and drops the
+        /// top-level DataItem (F-TEST-BUG-2 fix), Strict raises once and
+        /// returns a null device.
+        /// </summary>
         [TestCase(DeviceValidationLevel.Ignore)]
         [TestCase(DeviceValidationLevel.Warning)]
         [TestCase(DeviceValidationLevel.Remove)]

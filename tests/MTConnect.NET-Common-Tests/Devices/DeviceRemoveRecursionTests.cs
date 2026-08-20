@@ -15,7 +15,7 @@ namespace MTConnect.NET_Common_Tests.Devices
     /// F-TEST-BUG-1 (nested Composition unremovable) and F-TEST-BUG-2
     /// (top-level Device DataItem unremovable). The existing
     /// <c>DeviceValidationLevelEnumArmTests</c> exercises the fix through
-    /// <see cref="MTConnect.Agents.MTConnectAgent.NormalizeDevice"/>; this
+    /// <c>MTConnect.Agents.MTConnectAgent.NormalizeDevice</c>; this
     /// fixture pins the SAME methods against the coverage-FLOOR shapes
     /// the audit brief for cycle-2 explicitly listed — top-level
     /// Device.Compositions collection, great-grandchild Component depth,
@@ -157,7 +157,7 @@ namespace MTConnect.NET_Common_Tests.Devices
         /// <summary>
         /// Pins deep-Component DataItem removal:
         /// Device → Component → subComponent → subsubComponent → DataItem.
-        /// The override iterates <see cref="Device.GetComponents"/> which is
+        /// The override iterates <see cref="Device.GetComponents()"/> which is
         /// recursive and returns a flat list of every Component at any
         /// depth; the DataItem must therefore be removed regardless of
         /// how deep the owning Component sits.
