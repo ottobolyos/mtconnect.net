@@ -123,19 +123,30 @@ namespace MTConnect.Tests.Common.Configurations
         // Programmatic Normalize()
         // ---------------------------------------------------------------
 
-        /// <summary>Pins that a caller who builds an <see cref="AgentConfiguration"/> in code and calls <see cref="AgentConfiguration.Normalize"/> gets the same mirror.</summary>
+        /// <summary>Pins that a caller who builds an <see cref="AgentConfiguration"/> in code and calls <see cref="AgentConfiguration.Normalize"/> latches the mirror into the backing field.</summary>
+        /// <remarks>
+        /// Dime cycle-2 finding M3-C2 hardened the getter to self-mirror in the null case, so the
+        /// pre-Normalize read already returns <see cref="DeviceValidationLevel.Remove"/> in this
+        /// scenario. Normalize's role is to latch that mirror into the backing field so
+        /// post-Normalize serialisation carries the concrete value (not null); the sticky-suppression
+        /// semantics still fall out of the null-check inside <see cref="AgentConfiguration.Normalize"/>.
+        /// </remarks>
         [Test]
         public void Normalize_Mirrors_InputValidationLevel_When_DeviceValidationLevel_Not_Explicit()
         {
             var config = new AgentConfiguration();
             config.InputValidationLevel = InputValidationLevel.Remove;
 
-            // Precondition: the ctor default is Warning. Verify the assignment above did NOT touch
-            // DeviceValidationLevel — that is the whole point of the flag.
-            Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Warning));
+            // Under the M3-C2 self-mirroring getter, the pre-Normalize read already reports the
+            // mirror — programmatic callers no longer see the bare Warning default just because
+            // they forgot to call Normalize().
+            Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Remove),
+                "getter self-mirrors from _inputValidationLevel while _deviceValidationLevel is null — dime M3-C2");
 
             config.Normalize();
 
+            // Post-Normalize the mirror is latched into the backing field; the getter returns the
+            // same value via the explicit branch now instead of the null-mirror branch.
             Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Remove));
         }
 
