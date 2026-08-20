@@ -167,13 +167,9 @@ namespace MTConnect.Configurations
             get => _deviceValidationLevel ?? DeviceValidationLevelDefault;
             set
             {
-                if (!Enum.IsDefined(typeof(DeviceValidationLevel), value))
-                {
-                    throw new ArgumentOutOfRangeException(
-                        nameof(value),
-                        value,
-                        "DeviceValidationLevel must be one of Ignore (0), Warning (1), Remove (2), Strict (3).");
-                }
+                ThrowIfUndefined(
+                    value,
+                    "DeviceValidationLevel must be one of Ignore (0), Warning (1), Remove (2), Strict (3).");
                 _deviceValidationLevel = value;
             }
         }
@@ -191,13 +187,9 @@ namespace MTConnect.Configurations
             get => _inputValidationLevel;
             set
             {
-                if (!Enum.IsDefined(typeof(InputValidationLevel), value))
-                {
-                    throw new ArgumentOutOfRangeException(
-                        nameof(value),
-                        value,
-                        "InputValidationLevel must be one of Ignore (0), Warning (1), Remove (2), Strict (3).");
-                }
+                ThrowIfUndefined(
+                    value,
+                    "InputValidationLevel must be one of Ignore (0), Warning (1), Remove (2), Strict (3).");
                 _inputValidationLevel = value;
             }
         }
@@ -290,6 +282,33 @@ namespace MTConnect.Configurations
                 current = current.InnerException;
             }
             return null;
+        }
+
+        /// <summary>
+        /// Throws <see cref="ArgumentOutOfRangeException"/> when <paramref name="value"/>
+        /// is not a defined <typeparamref name="TEnum"/> arm. Extracted from the
+        /// duplicated setter throw blocks on <see cref="DeviceValidationLevel"/> and
+        /// <see cref="InputValidationLevel"/> — dime cycle-1 finding L4. The message
+        /// is caller-supplied so each setter can name the enum it guards.
+        /// </summary>
+        /// <remarks>
+        /// The .NET 5+ generic <c>Enum.IsDefined&lt;TEnum&gt;</c> overload avoids the
+        /// boxing that the legacy <c>Enum.IsDefined(Type, object)</c> path incurs;
+        /// the netstandard2.0 branch keeps the reflection form since the generic
+        /// overload was not introduced until .NET 5.
+        /// </remarks>
+        private static void ThrowIfUndefined<TEnum>(TEnum value, string message)
+            where TEnum : struct, Enum
+        {
+#if NET5_0_OR_GREATER
+            if (Enum.IsDefined(value)) return;
+#else
+            if (Enum.IsDefined(typeof(TEnum), value)) return;
+#endif
+            throw new ArgumentOutOfRangeException(
+                "value",
+                value,
+                message);
         }
 
 
