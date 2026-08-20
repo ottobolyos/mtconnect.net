@@ -85,9 +85,11 @@ Parses an `MTConnectSysMLModel.xml` (the XMI export of the standard's SysML mode
 
 | Flag | Short | Argument | Description |
 | --- | --- | --- | --- |
+| `--compat-version-label` |  | `<value>` | &lt;label&gt; Label used for the Compat/&lt;label&gt;.g.cs file name in delta mode. Defaults to "Previous". Ignored unless --previous-xmi is supplied. |
 | `--help` |  |  |  |
 | `--json-dump` |  | `<value>` | Optional. Writes the parsed MTConnectModel as JSON for debugging. |
 | `--output` |  | `<value>` | Repository root. Each subgenerator writes into its own libraries/&lt;LibraryName&gt;/ subtree under this root. Required. |
+| `--previous-xmi` |  | `<value>` | Opt-in delta-driven mode. When supplied, the generator renders both XMIs to scratch directories, diffs the emitted trees at the file level, and writes only the .g.cs files whose content changed between the two — plus a per-library Compat/&lt;label&gt;.g.cs file that concentrates every unchanged .g.cs file into a single re-emit surface (per plan D4). Files present in --previous-xmi's tree but absent from --xmi's tree (REMOVED types) are dropped. Files present in --xmi's tree but absent from --previous-xmi's tree (ADDED types) are written normally. |
 | `--xmi` |  | `<value>` | SysML XMI file to consume. Required. |
 
 ### `dotnet.sh`
