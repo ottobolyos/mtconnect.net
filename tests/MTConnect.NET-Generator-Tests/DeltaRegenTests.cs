@@ -244,6 +244,8 @@ namespace MTConnect.NET_Generator_Tests
 
             return Directory.EnumerateFiles(root, "*.g.cs", SearchOption.AllDirectories)
                 .Select(p => Path.GetRelativePath(root, p).Replace('\\', '/'))
+                .Where(p => !p.Contains("/bin/") && !p.Contains("/obj/") &&
+                            !p.StartsWith("bin/") && !p.StartsWith("obj/"))
                 .OrderBy(p => p, StringComparer.Ordinal)
                 .ToList();
         }

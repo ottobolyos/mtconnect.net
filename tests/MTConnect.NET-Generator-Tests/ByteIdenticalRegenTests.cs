@@ -186,6 +186,12 @@ namespace MTConnect.NET_Generator_Tests
         // Walks the tree, hashing every .g.cs file. Returns a dictionary
         // keyed by the path relative to <root> (forward-slash normalised)
         // with the SHA-256 hash of the file's byte content as value.
+        //
+        // MSBuild-generated intermediates under bin/ and obj/ (a library's
+        // GlobalUsings.g.cs from Microsoft.NET.Sdk.CSharp.CoreCompile.targets,
+        // ImplicitNamespaceImports.g.cs, etc.) are skipped — the generator
+        // never touches them, and their presence would spuriously flip this
+        // test RED on any host that has already built the solution.
         private static Dictionary<string, byte[]> HashGeneratedTree(string root)
         {
             var result = new Dictionary<string, byte[]>(StringComparer.Ordinal);
@@ -196,6 +202,9 @@ namespace MTConnect.NET_Generator_Tests
             foreach (var file in Directory.EnumerateFiles(root, "*.g.cs", SearchOption.AllDirectories))
             {
                 var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+                if (relative.Contains("/bin/") || relative.Contains("/obj/") ||
+                    relative.StartsWith("bin/") || relative.StartsWith("obj/"))
+                    continue;
                 using var stream = File.OpenRead(file);
                 result[relative] = sha.ComputeHash(stream);
             }
