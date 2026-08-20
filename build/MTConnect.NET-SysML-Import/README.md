@@ -81,10 +81,33 @@ Split the regen into per-target commits so reviewers can audit each layer indepe
 |---|---|---|---|
 | `--xmi <path>` | Yes | — | Path to the SysML XMI file to consume. |
 | `--output <path>` | Yes | — | Repository root. Each renderer writes into its own `libraries/<LibraryName>/` subtree under this root. |
+| `--previous-xmi <path>` | No | not set | Opt-in delta-driven mode. When supplied, the generator renders both XMIs to isolated scratch directories, diffs the emitted trees at the file level, and writes only the changed / added files into `--output` — plus a per-library `Compat/<label>.g.cs` file concentrating every unchanged type (plan D4). Files present in `--previous-xmi`'s tree but absent from `--xmi`'s tree (REMOVED types) are **deleted** from the output tree. Files concentrated into `Compat/<label>.g.cs` (UNCHANGED types) are also deleted from their individual `.g.cs` paths — the Compat file becomes the sole namespace host to avoid CS0101 duplicate-type collisions when `--output` points at a repo already carrying a full committed `.g.cs` tree. |
+| `--compat-version-label <label>` | No | `Previous` | Label used for the `Compat/<label>.g.cs` file name in delta mode. Must match `^[A-Za-z0-9_\-][A-Za-z0-9_\-.]*$`, ≤ 64 chars, no leading dot — hostile inputs like `../../etc/passwd` reject at exit 2. Ignored unless `--previous-xmi` is supplied. |
 | `--json-dump <path>` | No | not written | If set, dumps the parsed `MTConnectModel` as JSON. Useful for debugging. |
 | `--help`, `-h` | — | — | Print usage and exit. |
 
 `--xmi` and `--output` are mandatory. Running with no arguments exits with `error: --xmi <path> is required.` (exit code 2) and prints help.
+
+### Delta mode (`--previous-xmi`)
+
+Delta mode is the incremental-emit workflow for spec-version bumps: it emits only the code that changed vs. the prior spec, and concentrates every byte-identical file into a single `Compat/<label>.g.cs` per library. This keeps a spec-bump diff scoped to the types the spec actually changed.
+
+```bash
+dotnet run --project build/MTConnect.NET-SysML-Import \
+    -- --xmi  /tmp/mtconnect-sysml/v2.8/MTConnectSysMLModel.xml \
+       --previous-xmi  /tmp/mtconnect-sysml/v2.7/MTConnectSysMLModel.xml \
+       --compat-version-label  v2_7 \
+       --output  "$(pwd)"
+```
+
+Emission partitions per file:
+
+- **ADDED** (in new only) → written to normal `libraries/<lib>/...` path.
+- **CHANGED** (in both, different bytes) → written to normal path (new tree's version).
+- **REMOVED** (in prev only) → deleted from `--output` (the type stops shipping — the spec dropped it).
+- **UNCHANGED** (in both, identical bytes) → concentrated into `libraries/<lib>/Compat/<label>.g.cs`; the individual `.g.cs` file is deleted from the output tree so the Compat file is the sole namespace host.
+
+Byte-identity of unchanged types is preserved (plan D4 invariant); dropping `--previous-xmi` returns to full-tree mode bit-for-bit. Regression is covered by `tests/MTConnect.NET-Generator-Tests/DeltaRegenTests` and `DeltaCompatAndStatsTests`.
 
 ## Visual Studio F5 workflow
 

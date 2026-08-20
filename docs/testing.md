@@ -13,11 +13,12 @@ Each matrix lists every spec-defined element / attribute / enum value introduced
 
 ## Test tiers
 
-The repo organizes tests into three tiers:
+The repo organizes tests into four tiers:
 
 1. **Unit + integration** — `tests/<library>-Tests/`. Fast (< 30 s on a clean run), runs by default in CI and on `tools/test.sh` / `tools/test.ps1`. Filtered by `Category!=XsdLoadStrict` so the strict XSD-load gate does not block the green path.
 2. **Compliance** — `tests/Compliance/MTConnect-Compliance-Tests/`. Layered (`L1_XsdValidation`, `L2_CrossImpl`); see [`tests/Compliance/MTConnect-Compliance-Tests/README.md`](https://github.com/TrakHound/MTConnect.NET/blob/master/tests/Compliance/MTConnect-Compliance-Tests/README.md). Opt-in via `tools/test.sh --compliance` or `tools/test.ps1 -Compliance`.
 3. **E2E** — `tests/MTConnect.NET-Integration-Tests/` + `tests/E2E/**`. Docker-gated. Opt-in via `tools/test.sh --e2e` or `MTCONNECT_E2E_DOCKER=true`.
+4. **Generator regen guards** — `tests/MTConnect.NET-Generator-Tests/`. Dispatches the `build/MTConnect.NET-SysML-Import` CLI via `dotnet run --no-build` and asserts byte-identical regeneration against the current XMI (`Regen_is_deterministic_across_two_invocations` + `Current_XMI_regen_matches_committed_g_cs_tree`) plus surgical delta capture on a mutated-XMI cross-verify (`Delta_mode_against_same_XMI_concentrates_every_file_into_Compat` + `Delta_mode_against_mutated_XMI_emits_only_the_changed_file`). Complementary CLI failure-path + Compat body + stats-line invariants pinned by `CliInvocationFailureTests` and `DeltaCompatAndStatsTests`. Runs by default in the standard `dotnet test` sweep; see [`docs/testing/mutation-testing.md`](testing/mutation-testing.md) for the paired Stryker.NET mutation-score gate.
 
 ## Local entry points
 
