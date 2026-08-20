@@ -5,6 +5,7 @@ using MTConnect.SysML.Xml;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 // SysML importer entry point. Runs on Linux / macOS / Windows / CI.
 //
@@ -101,6 +102,19 @@ if (previousXmiPath is not null && !File.Exists(previousXmiPath))
     return 1;
 }
 
+// --compat-version-label flows through Path.Combine(compatDir, $"{label}.g.cs")
+// and must produce a safe, contained filename on every host. Reject anything
+// that would escape the Compat/ directory (path-separator sequences), select
+// a legal but surprising target (drive letters, NUL bytes, ASCII controls),
+// or produce a hidden dotfile. The default value "Previous" always passes.
+if (!IsSafeCompatLabel(compatVersionLabel))
+{
+    Console.Error.WriteLine(
+        $"error: --compat-version-label value '{compatVersionLabel}' is not a safe filename. " +
+        "Allowed shape: 1 to 64 characters, ASCII letters / digits / '_' / '-' / '.', no leading dot.");
+    return 2;
+}
+
 if (string.IsNullOrEmpty(outputRoot))
 {
     Console.Error.WriteLine("error: --output <path> is required.");
@@ -171,6 +185,20 @@ static string RequireValue(string[] argv, ref int index, string flag)
     if (index >= argv.Length)
         throw new ArgumentException($"Flag '{flag}' requires a value.");
     return argv[index];
+}
+
+// Validates that --compat-version-label produces a safe on-disk filename inside
+// the per-library Compat/ directory. Rejects: null / empty / whitespace, any
+// path separator or drive letter, ASCII control chars, leading dots (hidden
+// files), and lengths outside 1..64 chars. The default "Previous" always
+// passes; typical spec-labels like "v2_6" / "v2.5-rc3" / "PriorSpec" pass;
+// hostile inputs like "../../etc/passwd" or "Compat/../secret" reject at
+// argument-parse time.
+static bool IsSafeCompatLabel(string? label)
+{
+    if (string.IsNullOrWhiteSpace(label)) return false;
+    if (label.Length > 64) return false;
+    return Regex.IsMatch(label, @"^[A-Za-z0-9_\-][A-Za-z0-9_\-.]*$");
 }
 
 static void PrintHelp()
@@ -247,9 +275,14 @@ static void RenderXmlComponents(MTConnectModel model, string outputRoot)
 //   - Files present only in the NEW tree (ADDED) → written to outputRoot.
 //   - Files present in both trees with different bytes (CHANGED) → written
 //     to outputRoot (NEW tree's version).
-//   - Files present only in the PREV tree (REMOVED) → skipped entirely.
+//   - Files present only in the PREV tree (REMOVED) → DELETED from outputRoot
+//     so the type stops shipping (the spec dropped it).
 //   - Files present in both trees with identical bytes (UNCHANGED) →
-//     concentrated into Compat/<label>.g.cs per library, per plan D4.
+//     concentrated into Compat/<label>.g.cs per library, per plan D4. The
+//     individual .g.cs at outputRoot is DELETED so the Compat file is the
+//     sole namespace host (avoids CS0101 duplicate-type errors when the
+//     delta runs against a repo already carrying the committed .g.cs tree,
+//     which is the realistic use case).
 //
 // The Compat file concatenates the unchanged files' bodies verbatim (each
 // still carries its own `namespace X { ... }` block, so multi-namespace
@@ -350,10 +383,10 @@ static DeltaStats EmitDelta(string prevScratch, string newScratch, string output
                         compatBody.AppendLine("// Copyright (c) 2025 TrakHound Inc., All Rights Reserved.");
                         compatBody.AppendLine("// TrakHound Inc. licenses this file to you under the MIT license.");
                         compatBody.AppendLine();
-                        compatBody.AppendLine($"// Compat re-emit: concentrates every .g.cs file whose content did NOT change");
-                        compatBody.AppendLine($"// between --previous-xmi and --xmi. Each block carries its own namespace,");
-                        compatBody.AppendLine($"// so multi-namespace concentration is legal C#. Byte-identical to the");
-                        compatBody.AppendLine($"// full-tree emission for every included type (plan D4).");
+                        compatBody.AppendLine("// Compat re-emit: concentrates every .g.cs file whose content did NOT change");
+                        compatBody.AppendLine("// between --previous-xmi and --xmi. Each block carries its own namespace,");
+                        compatBody.AppendLine("// so multi-namespace concentration is legal C#. Byte-identical to the");
+                        compatBody.AppendLine("// full-tree emission for every included type (plan D4).");
                         compatBody.AppendLine();
                     }
                     compatBody.AppendLine($"// --- from {relativePath.Replace('\\', '/')} ---");
@@ -363,6 +396,15 @@ static DeltaStats EmitDelta(string prevScratch, string newScratch, string output
                     compatBody.AppendLine();
                     compatFileCount++;
                     stats.UnchangedConcentrated++;
+
+                    // Concentration replaces the individual file. If the operator ran
+                    // the delta against an outputRoot that already carried the
+                    // committed .g.cs tree (the realistic use case — the repo root),
+                    // leaving the individual file in place would produce CS0101
+                    // duplicate-type errors when the Compat file re-emits the same
+                    // namespaces. Delete pre-existing individual .g.cs so Compat is
+                    // the single source for UNCHANGED types.
+                    DeleteIfExists(Path.Combine(outputLibrary, relativePath));
                 }
                 else
                 {
@@ -379,11 +421,16 @@ static DeltaStats EmitDelta(string prevScratch, string newScratch, string output
             }
         }
 
-        // REMOVED types are simply not touched — they never appear in newFiles.
+        // REMOVED types (present in prev tree, absent from new tree). Delete the
+        // stale individual file from outputRoot so it stops shipping in the
+        // library; the type is intentionally gone from the new spec version.
         foreach (var relativePath in prevFiles.Keys)
         {
             if (!newFiles.ContainsKey(relativePath))
+            {
+                DeleteIfExists(Path.Combine(outputLibrary, relativePath));
                 stats.RemovedSkipped++;
+            }
         }
 
         if (compatFileCount > 0)
@@ -418,12 +465,7 @@ static Dictionary<string, byte[]> EnumerateGeneratedFiles(string root)
 }
 
 static bool ByteEquals(byte[] a, byte[] b)
-{
-    if (a.Length != b.Length) return false;
-    for (int i = 0; i < a.Length; i++)
-        if (a[i] != b[i]) return false;
-    return true;
-}
+    => ((ReadOnlySpan<byte>)a).SequenceEqual(b);
 
 static void WriteFile(string path, byte[] contents)
 {
@@ -431,6 +473,14 @@ static void WriteFile(string path, byte[] contents)
     if (!string.IsNullOrEmpty(directory))
         Directory.CreateDirectory(directory);
     File.WriteAllBytes(path, contents);
+}
+
+// Idempotent delete. Missing files no-op; existing files delete without following
+// symlinks (System.IO.File.Delete on .NET removes the link, not the target).
+static void DeleteIfExists(string path)
+{
+    if (File.Exists(path))
+        File.Delete(path);
 }
 
 // Per-run counters emitted at the tail of a delta invocation. Every category
