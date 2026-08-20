@@ -642,20 +642,19 @@ namespace MTConnect.SysML.CSharp
                         break;
 
                     case "Assets.CuttingTools.ToolingMeasurement":
-                        // ToolingMeasurement extends `Measurement` (the
-                        // CuttingTools abstract Measurement base, NOT
-                        // Assets.Pallet.Measurement). The CuttingTools
-                        // Measurement.g.cs is hand-maintained / frozen —
-                        // not produced by any current renderer flow — so
-                        // it never enters the export-side ClassModel
-                        // graph the inheritance walk traverses, and a
-                        // Name-only lookup of "Measurement" resolves to
-                        // Pallet.Measurement (which lacks Code). Class
-                        // side only — IMeasurement.g.cs has `Code`
-                        // commented out, so the interface child does NOT
-                        // hide anything and emitting `new` there would
-                        // produce CS0109 instead.
-                        classOnlyNames.Add("Code");
+                        // No hand-stitched inheritance seed needed. The
+                        // Assets.CuttingTools.Measurement base IS produced
+                        // by the current renderer flow (via
+                        // MTConnectAssetInformationModel.ParseAssetInformationModel's
+                        // sharedMeasurement injection which imports the
+                        // Pallet Measurement class under Assets.CuttingTools),
+                        // so the export-side ClassModel graph already carries
+                        // its property list. The Pallet Measurement lacks
+                        // Code, and the interface IMeasurement.g.cs likewise
+                        // has Code commented out — hence emitting `new` on
+                        // ToolingMeasurement.Code would raise CS0109 on both
+                        // the class and interface sides. Fall through to the
+                        // default inheritance walk with no override.
                         break;
                 }
 
