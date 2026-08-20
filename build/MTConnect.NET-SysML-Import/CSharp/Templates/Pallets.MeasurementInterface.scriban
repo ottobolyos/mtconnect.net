@@ -1,12 +1,12 @@
 // Copyright (c) 2025 TrakHound Inc., All Rights Reserved.
 // TrakHound Inc. licenses this file to you under the MIT license.
 
-namespace MTConnect.Assets.Pallet
+namespace {{namespace}}
 {
     /// <summary>
-    /// Loaded length of the PhysicalAsset
+    /// {{description}}
     /// </summary>
-    public interface ILoadedLengthMeasurement : IMeasurement
+    public interface I{{name}} : IMeasurement
     {
     }
 }
