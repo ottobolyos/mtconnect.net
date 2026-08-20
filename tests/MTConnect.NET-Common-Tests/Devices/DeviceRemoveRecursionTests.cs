@@ -2,7 +2,9 @@
 // TrakHound Inc. licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using MTConnect.Devices;
 using MTConnect.Devices.DataItems;
 using NUnit.Framework;
@@ -700,6 +702,143 @@ namespace MTConnect.NET_Common_Tests.Devices
             Assert.That(
                 deepLeaf.Compositions.Any(c => c.Id == "target-deep"), Is.True,
                 "Component.RemoveComposition must NOT reach past MaxComponentWalkDepth = 1024 — the Component-side ceiling constant must stay in sync with the Device-side ceiling.");
+        }
+
+        // --------------------------------------------------------------
+        // Trace-cap-hit diagnostic pin — dime L3-C2
+        // --------------------------------------------------------------
+        //
+        // Cycle-2 L3-C2 added `Trace.TraceWarning` lines to the three
+        // Device.Remove* private overloads that fire when the walk hits
+        // depth > MaxComponentWalkDepth = 1024. The existing depth-ceiling
+        // tests (RemoveComposition_depth_ceiling_removes_within_1024_leaves_past_1024_intact
+        // and RemoveDataItem_depth_ceiling_removes_within_1024_leaves_past_1024_intact)
+        // pin the null-effect contract (the deep target survives) but do NOT
+        // capture the trace output — a regression that silently drops the
+        // TraceWarning line still passes the intact-target assertions. This
+        // block attaches a TraceListener and pins the diagnostic shape so
+        // operators keep the actionable "walk depth 1024 exceeded" hint.
+
+        private sealed class CapturingTraceListener : TraceListener
+        {
+            public List<string> Warnings { get; } = new List<string>();
+            private readonly StringBuilder _lineBuffer = new StringBuilder();
+            public override void Write(string? message) => _lineBuffer.Append(message);
+            public override void WriteLine(string? message)
+            {
+                _lineBuffer.Append(message);
+                _lineBuffer.Clear();
+            }
+            public override void TraceEvent(TraceEventCache? eventCache, string source, TraceEventType eventType, int id, string? message)
+            {
+                if (eventType == TraceEventType.Warning) Warnings.Add(message ?? string.Empty);
+            }
+            public override void TraceEvent(TraceEventCache? eventCache, string source, TraceEventType eventType, int id, string? format, params object?[]? args)
+            {
+                var message = args != null && args.Length > 0 && format != null ? string.Format(format, args) : format;
+                TraceEvent(eventCache, source, eventType, id, message);
+            }
+        }
+
+        /// <summary>
+        /// Pins the L3-C2 trace-warning shape for
+        /// <see cref="Device.RemoveComposition(string)"/>. A regression that
+        /// drops the <c>Trace.TraceWarning</c> line inside the depth-guard
+        /// early-return still passes the depth-ceiling behavioural test above
+        /// because the deep-target-survives assertion only observes the
+        /// null-effect, not the diagnostic. This fixture captures Trace output
+        /// and asserts the warning fires with the exact shape operators grep on.
+        /// </summary>
+        [Test]
+        public void RemoveComposition_depth_ceiling_hit_traces_warning()
+        {
+            var listener = new CapturingTraceListener();
+            Trace.Listeners.Add(listener);
+            try
+            {
+                var device = BuildLinearDeepDevice(chainLength: 1030,
+                    shallowIndex: 999, deepIndex: 1029,
+                    out _, out var deepId,
+                    out _, out _);
+
+                device.RemoveComposition(deepId);
+
+                Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveComposition") && w.Contains("walk depth 1024 exceeded")),
+                    Is.True,
+                    "the depth-cap-hit path must emit a Trace.TraceWarning naming Device.RemoveComposition and the exceeded ceiling — dime L3-C2 diagnostic contract.");
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+            }
+        }
+
+        /// <summary>
+        /// Sibling L3-C2 pin for <see cref="Device.RemoveDataItem(string)"/>.
+        /// The three Device.Remove* variants share the ceiling AND the trace shape;
+        /// a regression that dropped the trace on just one variant would slip past
+        /// the other two variants' pins.
+        /// </summary>
+        [Test]
+        public void RemoveDataItem_depth_ceiling_hit_traces_warning()
+        {
+            var listener = new CapturingTraceListener();
+            Trace.Listeners.Add(listener);
+            try
+            {
+                var device = BuildLinearDeepDevice(chainLength: 1030,
+                    shallowIndex: 999, deepIndex: 1029,
+                    out _, out _,
+                    out _, out var deepLeaf);
+                const string deepDi = "di-deep-trace";
+                deepLeaf.AddDataItem(new DataItem { Id = deepDi, Name = deepDi, Type = "Generic", Category = DataItemCategory.EVENT });
+
+                device.RemoveDataItem(deepDi);
+
+                Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveDataItem") && w.Contains("walk depth 1024 exceeded")),
+                    Is.True,
+                    "the depth-cap-hit path must emit a Trace.TraceWarning naming Device.RemoveDataItem and the exceeded ceiling — dime L3-C2 diagnostic contract.");
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+            }
+        }
+
+        /// <summary>
+        /// Sibling L3-C2 pin for <see cref="Device.RemoveComponent(string)"/> —
+        /// the H1-C2 fix added the same depth guard on this Remove* variant.
+        /// A pathologically deep linear chain past depth 1024 hits the ceiling
+        /// on the walk into the chain regardless of whether the componentId
+        /// exists (RemoveComponent walks children and removes matching Ids;
+        /// on a linear chain with no matching Id, the walk visits every frame
+        /// until the ceiling fires).
+        /// </summary>
+        [Test]
+        public void RemoveComponent_depth_ceiling_hit_traces_warning()
+        {
+            var listener = new CapturingTraceListener();
+            Trace.Listeners.Add(listener);
+            try
+            {
+                var device = BuildLinearDeepDevice(chainLength: 1030,
+                    shallowIndex: 999, deepIndex: 1029,
+                    out _, out _,
+                    out _, out _);
+
+                // Call with a Component Id that doesn't exist anywhere in the
+                // chain — the walk visits every frame looking for it, hits the
+                // ceiling at depth 1025, fires the trace warning.
+                device.RemoveComponent("does-not-exist");
+
+                Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveComponent") && w.Contains("walk depth 1024 exceeded")),
+                    Is.True,
+                    "the depth-cap-hit path must emit a Trace.TraceWarning naming Device.RemoveComponent and the exceeded ceiling — dime L3-C2 diagnostic contract extended to the H1-C2 addition.");
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+            }
         }
     }
 }

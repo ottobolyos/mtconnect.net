@@ -2,8 +2,10 @@
 // TrakHound Inc. licenses this file to you under the MIT license.
 
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using MTConnect.Agents;
 using MTConnect.Configurations;
 using NUnit.Framework;
@@ -657,6 +659,305 @@ namespace MTConnect.Tests.Common.Configurations
 
             Assert.That(result, Is.Null,
                 "the helper must be null-safe — the loop condition current != null guards the very first iteration.");
+        }
+
+        // ---------------------------------------------------------------
+        // Trace-cap-hit diagnostic pin — dime L2-C2 (UnwrapArgumentOutOfRange)
+        // ---------------------------------------------------------------
+        //
+        // The cycle-2 L2-C2 change added a `Trace.TraceWarning` line to
+        // <c>UnwrapArgumentOutOfRange</c> that fires when the walk exits after
+        // MaxUnwrapDepth iterations with a non-null current frame — the diagnostic
+        // tells the operator the walk gave up before finding a wrapped AOORE that
+        // may exist deeper in the chain. The existing depth-ceiling test
+        // (<c>UnwrapArgumentOutOfRange_Returns_Null_When_AOORE_Sits_Past_Depth_Ceiling</c>)
+        // pins the null-return contract but does NOT capture the trace output.
+        // A regression that removes the TraceWarning line (silently degrading the
+        // diagnostic) still passes the null-return test. This fixture attaches a
+        // TraceListener to capture the warning and pins its shape.
+
+        /// <summary>
+        /// Pins that <c>UnwrapArgumentOutOfRange</c> emits a
+        /// <see cref="Trace.TraceWarning(string)"/> when the walk exits at
+        /// <c>MaxUnwrapDepth = 16</c> with a non-null current frame remaining —
+        /// the diagnostic operators depend on to know a pathological wrapping
+        /// chain was truncated. Dime cycle-2 finding L2-C2.
+        /// </summary>
+        [Test]
+        public void UnwrapArgumentOutOfRange_Traces_Warning_When_MaxUnwrapDepth_Exceeded()
+        {
+            var listener = new CapturingTraceListener();
+            Trace.Listeners.Add(listener);
+            try
+            {
+                // 20 wrappers around an AOORE puts the AOORE at depth 20 — past
+                // the MaxUnwrapDepth = 16 ceiling. The walk exits with `current`
+                // non-null (depth 16 is an InvalidOperationException wrap, not
+                // the AOORE), so the trace line fires.
+                var aoore = new ArgumentOutOfRangeException("value", "deep-20");
+                var chain = BuildWrappedChain(aoore, wrapCount: 20);
+
+                var result = InvokeUnwrap(chain);
+
+                Assert.That(result, Is.Null,
+                    "precondition — the depth-cap-hit path returns null; the trace warning is what pins the operator-visible diagnostic.");
+                Assert.That(listener.Warnings.Count, Is.EqualTo(1),
+                    "the L2-C2 fix requires exactly one Trace.TraceWarning per cap-hit call — not zero (regression that dropped the trace) and not more (regression that placed it inside the loop).");
+                var warning = listener.Warnings[0];
+                Assert.That(warning, Does.Contain("UnwrapArgumentOutOfRange"),
+                    "the warning must name the helper so operators can grep for the specific site.");
+                Assert.That(warning, Does.Contain("MaxUnwrapDepth=16"),
+                    "the warning must carry the exact ceiling value so a regression that changed the constant surfaces here rather than silently.");
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+            }
+        }
+
+        /// <summary>
+        /// Pins that <c>UnwrapArgumentOutOfRange</c> does NOT emit the cap-hit
+        /// trace warning on a chain that terminates naturally before the ceiling
+        /// (InnerException is null earlier). A regression that fired the warning
+        /// unconditionally would spam operator logs on every non-enum failure.
+        /// </summary>
+        [Test]
+        public void UnwrapArgumentOutOfRange_Does_Not_Trace_Warning_On_Chain_Shorter_Than_Ceiling()
+        {
+            var listener = new CapturingTraceListener();
+            Trace.Listeners.Add(listener);
+            try
+            {
+                // 5 wrappers around an InvalidOperationException — chain
+                // terminates at depth 5 (InnerException becomes null),
+                // no AOORE anywhere, but well within the MaxUnwrapDepth = 16
+                // ceiling so the trace warning line MUST NOT fire.
+                var innermost = new InvalidOperationException("innermost");
+                var chain = BuildWrappedChain(innermost, wrapCount: 5);
+
+                var result = InvokeUnwrap(chain);
+
+                Assert.That(result, Is.Null,
+                    "precondition — no AOORE anywhere in the chain so the helper returns null.");
+                Assert.That(listener.Warnings.Count, Is.EqualTo(0),
+                    "the trace warning must ONLY fire when the depth ceiling is reached; a chain that terminates naturally before the ceiling must not surface the diagnostic.");
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Loader triage across every overload — dime M2-C2
+        // ---------------------------------------------------------------
+        //
+        // The M2-C2 refactor extracted the three-clause triage into one
+        // <c>LoadWithTriage&lt;T&gt;</c> helper shared by all four public loader
+        // entrypoints:
+        //
+        //   * ReadJson&lt;T&gt;(string) — the generic entrypoint (also the target of
+        //     the ReadJson(string) shortcut, so the existing
+        //     ReadJson_Invalid_Enum_Ordinal_Throws_ArgumentException_With_Path test
+        //     exercises this path transitively).
+        //   * ReadJson(Type, string) — the Type-taking overload.
+        //   * ReadYaml&lt;T&gt;(string) — the generic entrypoint (also the target of
+        //     the ReadYaml(string) shortcut, exercised transitively above).
+        //   * ReadYaml(Type, string) — the Type-taking overload.
+        //
+        // The two Type-taking overloads were previously untested end-to-end.
+        // A regression that swapped their <c>LoadWithTriage</c> body for the
+        // pre-M2-C2 inline shape (dropping the middle wrapped-AOORE catch on
+        // the JSON side, for example) would slip past the existing coverage.
+        // These fixtures pin the shared-triage contract on every loader.
+
+        /// <summary>
+        /// Pins that the Type-taking <c>ReadJson(Type, path)</c> overload
+        /// surfaces the invalid-enum diagnostic through the shared
+        /// <c>LoadWithTriage</c> helper — the M2-C2 extraction requires
+        /// every overload behave identically. A regression that reverted this
+        /// overload to an inline catch (dropping the middle wrapped-AOORE clause)
+        /// would return null instead of the actionable ArgumentException.
+        /// </summary>
+        [Test]
+        public void ReadJson_Type_Overload_Invalid_Enum_Ordinal_Throws_ArgumentException_With_Path()
+        {
+            var path = WriteTempJson("{\"inputValidationLevel\":42}");
+            try
+            {
+                var ex = Assert.Throws<ArgumentException>(
+                    () => AgentConfiguration.ReadJson(typeof(AgentConfiguration), path));
+                Assert.That(ex!.Message, Does.Contain(path),
+                    "the Type-taking JSON overload must attach the configuration path — parity with the generic overload.");
+                Assert.That(ex.Message, Does.Contain("InputValidationLevel"),
+                    "the Type-taking JSON overload must preserve the setter's actionable message.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        /// Sibling pin for the Type-taking <c>ReadYaml(Type, path)</c> overload.
+        /// The YAML path exercises the wrapped-AOORE clause because YamlDotNet
+        /// nests the AOORE inside its own container exception.
+        /// </summary>
+        [Test]
+        public void ReadYaml_Type_Overload_Invalid_Enum_Ordinal_Throws_ArgumentException_With_Path()
+        {
+            var path = WriteTempYaml("inputValidationLevel: 42\n");
+            try
+            {
+                var ex = Assert.Throws<ArgumentException>(
+                    () => AgentConfiguration.ReadYaml(typeof(AgentConfiguration), path));
+                Assert.That(ex!.Message, Does.Contain(path),
+                    "the Type-taking YAML overload must attach the configuration path — parity with the generic overload.");
+                Assert.That(ex.Message, Does.Contain("InputValidationLevel"),
+                    "the Type-taking YAML overload must unwrap the deserialiser wrapper and preserve the setter's actionable message.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        /// Pins that the Type-taking <c>ReadJson(Type, path)</c> overload
+        /// preserves the null-return loader contract on non-enum failures —
+        /// symmetric with <see cref="ReadJson_Malformed_Json_Returns_Null_Preserving_Loader_Contract"/>
+        /// for the generic overload.
+        /// </summary>
+        [Test]
+        public void ReadJson_Type_Overload_Malformed_Json_Returns_Null_Preserving_Loader_Contract()
+        {
+            var path = WriteTempJson("{ this is not valid json ]");
+            try
+            {
+                AgentConfiguration config = new AgentConfiguration();
+                Assert.DoesNotThrow(() => config = AgentConfiguration.ReadJson(typeof(AgentConfiguration), path),
+                    "non-enum parse failures must not throw — the documented loader contract is null-on-failure.");
+                Assert.That(config, Is.Null,
+                    "the Type-taking JSON overload must return null for malformed input — parity with the generic overload's contract.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        /// Pins the shared <c>LoadWithTriage&lt;T&gt;</c> helper's
+        /// <c>where T : class</c> generic constraint — the M2-C2 refactor relies
+        /// on returning null on the generic fall-through, which requires a
+        /// reference-type constraint. A regression that dropped the constraint
+        /// (or widened it to a value-type-permissive shape) would silently
+        /// compile-error inside the helper body on the <c>return null</c> line;
+        /// pinning the constraint via reflection catches the change at test time
+        /// rather than through a downstream build break.
+        /// </summary>
+        [Test]
+        public void LoadWithTriage_Has_Class_Constraint_On_T_Parameter()
+        {
+            var method = typeof(AgentConfiguration).GetMethod(
+                "LoadWithTriage",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null,
+                "LoadWithTriage must exist as a static non-public generic helper on AgentConfiguration — the M2-C2 extraction contract.");
+            Assert.That(method!.IsGenericMethodDefinition, Is.True,
+                "LoadWithTriage must remain a generic method — collapsing to a non-generic returning AgentConfiguration would re-force each caller to cast, undoing the extraction.");
+            var genericArgs = method.GetGenericArguments();
+            Assert.That(genericArgs.Length, Is.EqualTo(1),
+                "LoadWithTriage takes exactly one generic parameter T.");
+            var attrs = genericArgs[0].GenericParameterAttributes;
+            Assert.That(
+                (attrs & System.Reflection.GenericParameterAttributes.ReferenceTypeConstraint) != 0,
+                Is.True,
+                "T must carry the ReferenceTypeConstraint (`where T : class`) so `return null` in the generic fall-through compiles — dime M2-C2 shape contract.");
+        }
+
+        /// <summary>
+        /// Pins that the generic-fall-through branch of <c>LoadWithTriage</c> emits
+        /// a <see cref="Trace.TraceError(string)"/> line naming the configuration
+        /// path, not just silently returning null. The pre-M2-C2 inline triage
+        /// contained the same trace line, so this is a shape-preservation pin —
+        /// a regression that dropped the trace on the shared helper would remove
+        /// operator diagnostics for every loader at once (blast radius × 4 vs. × 1
+        /// pre-extraction).
+        /// </summary>
+        [Test]
+        public void LoadWithTriage_Generic_Fall_Through_Traces_Error_With_Path()
+        {
+            var listener = new CapturingTraceListener();
+            Trace.Listeners.Add(listener);
+            try
+            {
+                var path = WriteTempJson("{ this is not valid json ]");
+                try
+                {
+                    var result = AgentConfiguration.ReadJson(path);
+
+                    Assert.That(result, Is.Null,
+                        "precondition — malformed JSON hits the generic fall-through and returns null.");
+                    Assert.That(listener.Errors.Count, Is.GreaterThanOrEqualTo(1),
+                        "the generic-fall-through must emit at least one Trace.TraceError so the operator sees the diagnostic — dime M2-C2 shape preservation.");
+                    Assert.That(listener.Errors[0], Does.Contain(path),
+                        "the error trace must name the configuration path so the operator can trace the failure back to its file.");
+                    Assert.That(listener.Errors[0], Does.Contain("Config load failed"),
+                        "the error trace must carry the documented 'Config load failed' prefix used by the extracted helper.");
+                }
+                finally
+                {
+                    File.Delete(path);
+                }
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Trace-listener capture harness
+        // ---------------------------------------------------------------
+
+        private sealed class CapturingTraceListener : TraceListener
+        {
+            public System.Collections.Generic.List<string> Warnings { get; } = new System.Collections.Generic.List<string>();
+            public System.Collections.Generic.List<string> Errors { get; } = new System.Collections.Generic.List<string>();
+            private readonly StringBuilder _lineBuffer = new StringBuilder();
+
+            public override void Write(string? message) => _lineBuffer.Append(message);
+
+            public override void WriteLine(string? message)
+            {
+                _lineBuffer.Append(message);
+                // No routing hint — the raw TraceWarning / TraceError calls flow
+                // through TraceEvent below with a matching event type. The
+                // Write/WriteLine fallbacks are here so a listener attached to
+                // a plain Trace.WriteLine still captures.
+                _lineBuffer.Clear();
+            }
+
+            public override void TraceEvent(TraceEventCache? eventCache, string source, TraceEventType eventType, int id, string? message)
+            {
+                switch (eventType)
+                {
+                    case TraceEventType.Warning:
+                        Warnings.Add(message ?? string.Empty);
+                        break;
+                    case TraceEventType.Error:
+                    case TraceEventType.Critical:
+                        Errors.Add(message ?? string.Empty);
+                        break;
+                }
+            }
+
+            public override void TraceEvent(TraceEventCache? eventCache, string source, TraceEventType eventType, int id, string? format, params object?[]? args)
+            {
+                var message = args != null && args.Length > 0 && format != null ? string.Format(format, args) : format;
+                TraceEvent(eventCache, source, eventType, id, message);
+            }
         }
 
         // ---------------------------------------------------------------
