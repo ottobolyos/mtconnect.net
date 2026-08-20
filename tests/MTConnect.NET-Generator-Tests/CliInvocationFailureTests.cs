@@ -356,10 +356,13 @@ namespace MTConnect.NET_Generator_Tests
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException("Failed to start dotnet run for the generator.");
 
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
+            // Drain stdout and stderr concurrently — see ByteIdenticalRegenTests
+            // for the deadlock defence this pattern encodes.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
             proc.WaitForExit();
-            return (proc.ExitCode, stdout, stderr);
+            return (proc.ExitCode, stdoutTask.Result, stderrTask.Result);
         }
     }
 }

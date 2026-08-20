@@ -228,10 +228,15 @@ namespace MTConnect.NET_Generator_Tests
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException("Failed to start dotnet run for the generator.");
 
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
+            // Drain stdout AND stderr concurrently — blocking on one pipe while
+            // the child writes >4 KB to the other deadlocks (Linux pipe buffer
+            // fills, child blocks on write, parent blocks on read of the empty
+            // pipe). See ByteIdenticalRegenTests for the same defence.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
             proc.WaitForExit();
-            return (proc.ExitCode, stdout, stderr);
+            return (proc.ExitCode, stdoutTask.Result, stderrTask.Result);
         }
 
         // Enumerates every .g.cs under `root` and returns forward-slash-normalised

@@ -146,18 +146,20 @@ namespace MTConnect.NET_Common_Tests.DryGenerator
         [Test]
         public void TopicAnchors_covers_at_least_the_full_migrated_baseline()
         {
-            // The Phase 1 migration surfaced 22 distinct anchor types across
-            // six topic fixtures. The map above enumerates them explicitly.
-            // A future edit that truncates the anchor list below the
-            // baseline (e.g. "we don't need to pin WaterHardness any more")
-            // must land alongside a rationale in the topic fixture AND
-            // decrement this floor with the same rationale. A silent
-            // shrink is the failure mode this guard catches.
-            Assert.That(TopicAnchors.Length, Is.GreaterThanOrEqualTo(22),
-                $"TopicAnchors shrank to {TopicAnchors.Length} entries — the Phase 1 "
-                + "migration baseline is 22 entries. Restore the anchor rows or, if the "
-                + "shrink is intentional, decrement this floor with a rationale that "
-                + "cross-references the topic fixture removal.");
+            // The Phase 1 migration surfaced 23 distinct anchor types across
+            // six topic fixtures (4 Components + 3 DataItems + 11 Configuration
+            // + 1 WaterHardness + 2 Enum + 2 Version). The map above
+            // enumerates them explicitly. A future edit that changes the
+            // anchor list must land alongside a rationale in the topic
+            // fixture AND update this pinned count with the same rationale.
+            // Exact-equality matches the AssertionParityTests pattern (which
+            // pins the migration map at exactly 34) so a silent drop of one
+            // row cannot slip past a "≥ baseline" smoke floor.
+            Assert.That(TopicAnchors.Length, Is.EqualTo(23),
+                $"TopicAnchors is at {TopicAnchors.Length} entries — the Phase 1 "
+                + "migration baseline is exactly 23 entries. Restore the anchor rows "
+                + "or, if the change is intentional, update this pinned count with a "
+                + "rationale that cross-references the topic fixture change.");
         }
 
         /// <summary>Pins the smoke-invariant: every distinct topic fixture named in TopicAnchors is present on disk.</summary>
