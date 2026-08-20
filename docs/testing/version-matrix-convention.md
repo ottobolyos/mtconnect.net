@@ -1,6 +1,6 @@
 # Version-matrix convention (topic-first single-file-per-topic layout)
 
-Established by the Phase 1 DRY-generator consolidation (PR TrakHound/MTConnect.NET#233, 2026-08-19). Enforced permanently by [`DryGenerator/PerVersionFolderProhibitionTests.cs`](../../tests/MTConnect.NET-Common-Tests/DryGenerator/PerVersionFolderProhibitionTests.cs); parity between pre- and post-migration assertions is pinned by [`DryGenerator/AssertionParityTests.cs`](../../tests/MTConnect.NET-Common-Tests/DryGenerator/AssertionParityTests.cs).
+Established by the Phase 1 DRY-generator consolidation (PR TrakHound/MTConnect.NET#233, 2026-08-19). Enforced permanently by [`DryGenerator/PerVersionFolderProhibitionTests.cs`](https://github.com/TrakHound/MTConnect.NET/blob/master/tests/MTConnect.NET-Common-Tests/DryGenerator/PerVersionFolderProhibitionTests.cs); parity between pre- and post-migration assertions is pinned by [`DryGenerator/AssertionParityTests.cs`](https://github.com/TrakHound/MTConnect.NET/blob/master/tests/MTConnect.NET-Common-Tests/DryGenerator/AssertionParityTests.cs).
 
 ## The rule
 
@@ -13,7 +13,7 @@ Version becomes a **parameter**, not a **container**. A single fixture file hous
 
 ## How to add a fixture for a new spec version
 
-1. Ensure the version constant exists on [`MTConnect.MTConnectVersions`](../../libraries/MTConnect.NET-Common/MTConnectVersions.cs) (for example `public static readonly Version Version28 = new(2, 8);`). The matrix (`MTConnectVersionMatrix.All`) discovers it via reflection — no per-test edit is required.
+1. Ensure the version constant exists on [`MTConnect.MTConnectVersions`](https://github.com/TrakHound/MTConnect.NET/blob/master/libraries/MTConnect.NET-Common/MTConnectVersions.cs) (for example `public static readonly Version Version28 = new(2, 8);`). The matrix (`MTConnectVersionMatrix.All`) discovers it via reflection — no per-test edit is required.
 2. Find the topic file the new element belongs to (or create a new one under `Devices/`, `Observations/`, `Enums/`, or `Assets/`). Never create a `V2_8/` folder.
 3. Add a method with the matrix source and the version gate:
 
@@ -53,7 +53,7 @@ The `Every_baseline_assertion_has_a_post_migration_home` reflection sweep is che
 ## References
 
 - Migration PR: [TrakHound/MTConnect.NET#233](https://github.com/TrakHound/MTConnect.NET/pull/233).
-- Prohibition guard: [`tests/MTConnect.NET-Common-Tests/DryGenerator/PerVersionFolderProhibitionTests.cs`](../../tests/MTConnect.NET-Common-Tests/DryGenerator/PerVersionFolderProhibitionTests.cs).
-- Parity guard: [`tests/MTConnect.NET-Common-Tests/DryGenerator/AssertionParityTests.cs`](../../tests/MTConnect.NET-Common-Tests/DryGenerator/AssertionParityTests.cs).
-- Matrix source: [`tests/MTConnect.NET-Common-Tests/TestHelpers/MTConnectVersionMatrix.cs`](../../tests/MTConnect.NET-Common-Tests/TestHelpers/MTConnectVersionMatrix.cs).
+- Prohibition guard: [`tests/MTConnect.NET-Common-Tests/DryGenerator/PerVersionFolderProhibitionTests.cs`](https://github.com/TrakHound/MTConnect.NET/blob/master/tests/MTConnect.NET-Common-Tests/DryGenerator/PerVersionFolderProhibitionTests.cs).
+- Parity guard: [`tests/MTConnect.NET-Common-Tests/DryGenerator/AssertionParityTests.cs`](https://github.com/TrakHound/MTConnect.NET/blob/master/tests/MTConnect.NET-Common-Tests/DryGenerator/AssertionParityTests.cs).
+- Matrix source: [`tests/MTConnect.NET-Common-Tests/TestHelpers/MTConnectVersionMatrix.cs`](https://github.com/TrakHound/MTConnect.NET/blob/master/tests/MTConnect.NET-Common-Tests/TestHelpers/MTConnectVersionMatrix.cs).
 - Compliance-matrix pages: [`v2-6.md`](./v2-6.md), [`v2-7.md`](./v2-7.md).
