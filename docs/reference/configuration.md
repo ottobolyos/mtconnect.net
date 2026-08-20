@@ -198,7 +198,7 @@ Configuration for an MTConnect Agent
 | `changeToken` | `ChangeToken` | `string` | An opaque token that changes whenever the underlying configuration source is reloaded, allowing consumers to detect that the configuration has been replaced. |
 | `convertUnits` | `ConvertUnits` | `bool` | Gets the default for Converting Units when adding Observations |
 | `defaultVersion` | `DefaultVersion` | `Version` | Gets the default MTConnect version to output response documents for. |
-| `deviceValidationLevel` | `DeviceValidationLevel` | `DeviceValidationLevel` | Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict |
+| `deviceValidationLevel` | `DeviceValidationLevel` | `DeviceValidationLevel` | Gets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict |
 | `enableAgentDevice` | `EnableAgentDevice` | `bool` | Gets or Sets whether the Agent Device is output |
 | `enableMetrics` | `EnableMetrics` | `bool` | Gets whether Metrics are captured (ex. ObserationUpdateRate, AssetUpdateRate) |
 | `enableValidation` | `EnableValidation` | `bool` | Gets or Sets whether validation information is output |
