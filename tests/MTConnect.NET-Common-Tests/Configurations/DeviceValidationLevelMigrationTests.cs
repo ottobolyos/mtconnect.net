@@ -441,6 +441,86 @@ namespace MTConnect.Tests.Common.Configurations
         }
 
         // ---------------------------------------------------------------
+        // Load-time enum-value validation — dime H2 + M4
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Pins that a JSON config with an out-of-range integer for
+        /// <c>inputValidationLevel</c> throws an <see cref="ArgumentException"/>
+        /// whose message names the offending configuration path — the pre-fix
+        /// <c>catch { }</c> silently returned null, hiding the actionable
+        /// setter diagnostic from the operator. Dime cycle-1 finding H2
+        /// (security-audit A09 + code-review F-CR-241-04) required the swallow
+        /// be replaced; M4 required the path be attached.
+        /// </summary>
+        [Test]
+        public void ReadJson_Invalid_Enum_Ordinal_Throws_ArgumentException_With_Path()
+        {
+            var path = WriteTempJson("{\"inputValidationLevel\":42}");
+            try
+            {
+                var ex = Assert.Throws<ArgumentException>(() => AgentConfiguration.ReadJson(path));
+                Assert.That(ex!.Message, Does.Contain(path),
+                    "the wrapped exception must carry the configuration path so operators can trace the bad key back to its file.");
+                Assert.That(ex.Message, Does.Contain("InputValidationLevel"),
+                    "the wrapped exception must preserve the setter's actionable message naming the failing enum.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        /// Sibling of the JSON test — the YAML load path must also surface the
+        /// enum-out-of-range setter exception (unwrapping any deserialiser-level
+        /// wrapper — YamlDotNet nests AOORE inside its own container) with the
+        /// configuration path attached.
+        /// </summary>
+        [Test]
+        public void ReadYaml_Invalid_Enum_Ordinal_Throws_ArgumentException_With_Path()
+        {
+            var path = WriteTempYaml("inputValidationLevel: 42\n");
+            try
+            {
+                var ex = Assert.Throws<ArgumentException>(() => AgentConfiguration.ReadYaml(path));
+                Assert.That(ex!.Message, Does.Contain(path),
+                    "the wrapped exception must carry the configuration path so operators can trace the bad key back to its file.");
+                Assert.That(ex.Message, Does.Contain("InputValidationLevel"),
+                    "the unwrapped setter message must survive so callers still see the actionable diagnostic.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        /// Pins that a malformed-but-parseable-shape JSON (invalid syntax that
+        /// makes JsonSerializer throw a non-enum exception) preserves the
+        /// documented null-return contract — the H2 fix converts silent swallow
+        /// into Trace.TraceError diagnostic but must NOT change the return
+        /// contract for non-enum failures.
+        /// </summary>
+        [Test]
+        public void ReadJson_Malformed_Json_Returns_Null_Preserving_Loader_Contract()
+        {
+            var path = WriteTempJson("{ this is not valid json ]");
+            try
+            {
+                AgentConfiguration config = new AgentConfiguration();
+                Assert.DoesNotThrow(() => config = AgentConfiguration.ReadJson(path),
+                    "non-enum parse failures must not throw — the documented loader contract is null-on-failure.");
+                Assert.That(config, Is.Null,
+                    "the loader must return null for malformed input to preserve pre-fix caller contracts.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // ---------------------------------------------------------------
         // Fixture harness
         // ---------------------------------------------------------------
 
