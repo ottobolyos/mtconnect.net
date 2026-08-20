@@ -16,49 +16,66 @@ namespace MTConnect
     /// </summary>
     public static class JsonFunctions
     {
+        // A JsonSerializerOptions instance owns its own serialization
+        // metadata cache, and building that cache emits reflection-based
+        // property accessors (LCG DynamicMethods) for every property in
+        // the reachable type graph. Allocating a fresh instance per call
+        // therefore re-emits those accessors on every serialization, and
+        // the emitted code accumulates in the runtime's loader heaps
+        // where the GC cannot reclaim it — this is the mechanism behind
+        // the ~3.3 MB/h RSS climb observed on DIME production hosts in
+        // 2026-08. The instances below are created once and reused;
+        // JsonSerializerOptions is thread-safe for read after its first
+        // (de)serialization, and nothing in this file mutates them after
+        // construction.
+        private static readonly JsonSerializerOptions _defaultOptions = CreateOptions(false);
+        private static readonly JsonSerializerOptions _indentOptions = CreateOptions(true);
+
+        private static JsonSerializerOptions CreateOptions(bool indented)
+        {
+            return new JsonSerializerOptions
+            {
+                WriteIndented = indented,
+#if NET5_0_OR_GREATER
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
+                NumberHandling = JsonNumberHandling.AllowReadingFromString,
+#endif
+                PropertyNameCaseInsensitive = true,
+                MaxDepth = 1000
+            };
+        }
+
+        private static JsonSerializerOptions GetOptions(JsonConverter converter, bool indented)
+        {
+            // Hot path: no per-call converter, hand back the shared
+            // instance and let System.Text.Json reuse its metadata cache
+            // instead of re-emitting property accessors for the whole
+            // type graph on every call.
+            if (converter == null) return indented ? _indentOptions : _defaultOptions;
+
+            // Cold path: a caller-supplied converter cannot be added to
+            // a shared instance once it has been used, so build a
+            // private one. Callers that mint many one-off converters
+            // will still pay the LCG cost — this fallback preserves the
+            // public API contract for external consumers.
+            var options = CreateOptions(indented);
+            options.Converters.Add(converter);
+            return options;
+        }
+
         /// <summary>
         /// The default <see cref="JsonSerializerOptions"/> used by MTConnect
         /// JSON serialization: compact output, default-valued properties
         /// omitted on write (on net5+), numbers read from strings (on net5+),
         /// case-insensitive property names, and a depth limit of 1000.
         /// </summary>
-        public static JsonSerializerOptions DefaultOptions
-        {
-            get
-            {
-                return new JsonSerializerOptions
-                {
-                    WriteIndented = false,
-#if NET5_0_OR_GREATER
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
-                    NumberHandling = JsonNumberHandling.AllowReadingFromString,
-#endif
-                    PropertyNameCaseInsensitive = true,
-                    MaxDepth = 1000
-                };
-            }
-        }
+        public static JsonSerializerOptions DefaultOptions => _defaultOptions;
 
         /// <summary>
         /// The indented variant of <see cref="DefaultOptions"/>, used when the
         /// formatter's <c>indentOutput</c> option is set.
         /// </summary>
-        public static JsonSerializerOptions IndentOptions
-        {
-            get
-            {
-                return new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-#if NET5_0_OR_GREATER
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
-                    NumberHandling = JsonNumberHandling.AllowReadingFromString,
-#endif
-                    PropertyNameCaseInsensitive = true,
-                    MaxDepth = 1000
-                };
-            }
-        }
+        public static JsonSerializerOptions IndentOptions => _indentOptions;
 
 
         /// <summary>
@@ -97,18 +114,7 @@ namespace MTConnect
             {
                 try
                 {
-                    var options = new JsonSerializerOptions
-                    {
-                        WriteIndented = indented,
-#if NET5_0_OR_GREATER
-                        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
-                        NumberHandling = JsonNumberHandling.AllowReadingFromString,
-#endif
-                        PropertyNameCaseInsensitive = true,
-                        MaxDepth = 1000
-                    };
-
-                    if (converter != null) options.Converters.Add(converter);
+                    var options = GetOptions(converter, indented);
 
                     return JsonSerializer.Serialize(obj, options);
                 }
@@ -130,18 +136,7 @@ namespace MTConnect
             {
                 try
                 {
-                    var options = new JsonSerializerOptions
-                    {
-                        WriteIndented = indented,
-#if NET5_0_OR_GREATER
-                        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
-                        NumberHandling = JsonNumberHandling.AllowReadingFromString,
-#endif
-                        PropertyNameCaseInsensitive = true,
-                        MaxDepth = 1000
-                    };
-
-                    if (converter != null) options.Converters.Add(converter);
+                    var options = GetOptions(converter, indented);
 
                     return JsonSerializer.SerializeToUtf8Bytes(obj, options);
                 }
@@ -163,18 +158,7 @@ namespace MTConnect
             {
                 try
                 {
-                    var options = new JsonSerializerOptions
-                    {
-                        WriteIndented = indented,
-#if NET5_0_OR_GREATER
-                        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
-                        NumberHandling = JsonNumberHandling.AllowReadingFromString,
-#endif
-                        PropertyNameCaseInsensitive = true,
-                        MaxDepth = 1000
-                    };
-
-                    if (converter != null) options.Converters.Add(converter);
+                    var options = GetOptions(converter, indented);
 
                     var outputStream = new MemoryStream();
                     JsonSerializer.Serialize(outputStream, obj, options);
