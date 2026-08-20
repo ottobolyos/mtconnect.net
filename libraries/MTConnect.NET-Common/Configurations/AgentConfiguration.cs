@@ -285,6 +285,60 @@ namespace MTConnect.Configurations
         }
 
         /// <summary>
+        /// Shared triage wrapper for the four <c>Read{Json,Yaml}[&lt;T&gt;]</c> loader
+        /// methods. Each loader was previously duplicating the same three-clause
+        /// catch triage (direct AOORE → wrapped-AOORE via
+        /// <see cref="UnwrapArgumentOutOfRange"/> → generic fall-through that
+        /// traces and returns null) in-line. Extracting the triage into one
+        /// helper collapses ~96 lines of duplication and simultaneously closes the
+        /// cycle-1-vs-cycle-2 asymmetry (dime M2-C2 subsumes M1-C2): the
+        /// <see cref="ReadJson{T}(string)"/> path was missing the middle
+        /// <c>when Unwrap...</c> catch, so a wrapped enum error deserialised by
+        /// <c>System.Text.Json</c> was falling through to the generic
+        /// trace-and-return-null branch instead of raising
+        /// <see cref="ArgumentException"/> like the other three loaders. Sharing
+        /// the same body by construction fixes the asymmetry forever.
+        /// </summary>
+        /// <typeparam name="T">The concrete return type of the deserialiser call.</typeparam>
+        /// <param name="configurationPath">The resolved configuration path — used both in the surfaced <see cref="ArgumentException"/> message and in the generic-fall-through <see cref="Trace.TraceError(string)"/> line.</param>
+        /// <param name="deserialize">A closure that runs the deserialiser and returns the loaded configuration (or null when the source text was empty).</param>
+        private static T LoadWithTriage<T>(string configurationPath, Func<T> deserialize) where T : class
+        {
+            try
+            {
+                return deserialize();
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                // Invalid enum value in the source document — surface the actionable
+                // setter message with the offending configuration path attached so
+                // the operator can trace the bad key back to its file.
+                throw new ArgumentException(
+                    $"Invalid enum value in {configurationPath}: {ex.Message}",
+                    ex);
+            }
+            catch (Exception ex) when (UnwrapArgumentOutOfRange(ex) is ArgumentOutOfRangeException aoore)
+            {
+                // Deserialisers (YamlDotNet notably, and System.Text.Json when it
+                // routes through a JsonConverter) wrap setter throws inside one or
+                // more layers of their own container exception; walk the
+                // InnerException chain so a bad-enum config surfaces the same
+                // actionable message shape as the direct AOORE catch above.
+                throw new ArgumentException(
+                    $"Invalid enum value in {configurationPath}: {aoore.Message}",
+                    aoore);
+            }
+            catch (Exception ex)
+            {
+                // Parse / IO / unexpected failures preserve the null-return loader
+                // contract, but no longer swallow silently — trace the path and
+                // message so downstream operators see the diagnostic.
+                Trace.TraceError($"Config load failed: {configurationPath}: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Throws <see cref="ArgumentOutOfRangeException"/> when <paramref name="value"/>
         /// is not a defined <typeparamref name="TEnum"/> arm. Extracted from the
         /// duplicated setter throw blocks on <see cref="DeviceValidationLevel"/> and
@@ -402,38 +456,24 @@ namespace MTConnect.Configurations
 
             if (!string.IsNullOrEmpty(configurationPath))
             {
-                try
+                return LoadWithTriage(configurationPath, () =>
                 {
                     var text = File.ReadAllText(configurationPath);
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        var options = new JsonSerializerOptions()
-                        {
-                            ReadCommentHandling = JsonCommentHandling.Skip
-                        };
+                    if (string.IsNullOrEmpty(text)) return null;
 
-                        var configuration = JsonSerializer.Deserialize<T>(text, options);
+                    var options = new JsonSerializerOptions()
+                    {
+                        ReadCommentHandling = JsonCommentHandling.Skip
+                    };
+
+                    var configuration = JsonSerializer.Deserialize<T>(text, options);
+                    if (configuration != null)
+                    {
                         configuration.Path = configurationPath;
                         configuration.Normalize();
-                        return configuration;
                     }
-                }
-                catch (ArgumentOutOfRangeException ex)
-                {
-                    // Invalid enum value in the source document — surface the actionable
-                    // setter message with the offending configuration path attached so
-                    // the operator can trace the bad key back to its file.
-                    throw new ArgumentException(
-                        $"Invalid enum value in {configurationPath}: {ex.Message}",
-                        ex);
-                }
-                catch (Exception ex)
-                {
-                    // Parse / IO / unexpected failures preserve the null-return loader
-                    // contract, but no longer swallow silently — trace the path and
-                    // message so downstream operators see the diagnostic.
-                    Trace.TraceError($"Config load failed: {configurationPath}: {ex.Message}");
-                }
+                    return configuration;
+                });
             }
 
             return null;
@@ -458,48 +498,24 @@ namespace MTConnect.Configurations
 
             if (!string.IsNullOrEmpty(configurationPath))
             {
-                try
+                return LoadWithTriage(configurationPath, () =>
                 {
                     var text = File.ReadAllText(configurationPath);
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        var options = new JsonSerializerOptions()
-                        {
-                            ReadCommentHandling = JsonCommentHandling.Skip
-                        };
+                    if (string.IsNullOrEmpty(text)) return null;
 
-                        var configuration = (AgentConfiguration)JsonSerializer.Deserialize(text, type, options);
+                    var options = new JsonSerializerOptions()
+                    {
+                        ReadCommentHandling = JsonCommentHandling.Skip
+                    };
+
+                    var configuration = (AgentConfiguration)JsonSerializer.Deserialize(text, type, options);
+                    if (configuration != null)
+                    {
                         configuration.Path = configurationPath;
                         configuration.Normalize();
-                        return configuration;
                     }
-                }
-                catch (ArgumentOutOfRangeException ex)
-                {
-                    // Invalid enum value in the source document — surface the actionable
-                    // setter message with the offending configuration path attached so
-                    // the operator can trace the bad key back to its file.
-                    throw new ArgumentException(
-                        $"Invalid enum value in {configurationPath}: {ex.Message}",
-                        ex);
-                }
-                catch (Exception ex) when (UnwrapArgumentOutOfRange(ex) is ArgumentOutOfRangeException aoore)
-                {
-                    // Deserialisers (YamlDotNet notably) wrap setter throws inside one
-                    // or more layers of their own container exception; walk the
-                    // InnerException chain so a bad-enum config surfaces the same
-                    // actionable message shape as the direct AOORE catch above.
-                    throw new ArgumentException(
-                        $"Invalid enum value in {configurationPath}: {aoore.Message}",
-                        aoore);
-                }
-                catch (Exception ex)
-                {
-                    // Parse / IO / unexpected failures preserve the null-return loader
-                    // contract, but no longer swallow silently — trace the path and
-                    // message so downstream operators see the diagnostic.
-                    Trace.TraceError($"Config load failed: {configurationPath}: {ex.Message}");
-                }
+                    return configuration;
+                });
             }
 
             return null;
@@ -525,48 +541,24 @@ namespace MTConnect.Configurations
 
             if (!string.IsNullOrEmpty(configurationPath))
             {
-                try
+                return LoadWithTriage(configurationPath, () =>
                 {
                     var text = File.ReadAllText(configurationPath);
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        var deserializer = new DeserializerBuilder()
-                            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                            .IgnoreUnmatchedProperties()
-                            .Build();
+                    if (string.IsNullOrEmpty(text)) return null;
 
-                        var configuration = deserializer.Deserialize<T>(text);
+                    var deserializer = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .IgnoreUnmatchedProperties()
+                        .Build();
+
+                    var configuration = deserializer.Deserialize<T>(text);
+                    if (configuration != null)
+                    {
                         configuration.Path = configurationPath;
                         configuration.Normalize();
-                        return configuration;
                     }
-                }
-                catch (ArgumentOutOfRangeException ex)
-                {
-                    // Invalid enum value in the source document — surface the actionable
-                    // setter message with the offending configuration path attached so
-                    // the operator can trace the bad key back to its file.
-                    throw new ArgumentException(
-                        $"Invalid enum value in {configurationPath}: {ex.Message}",
-                        ex);
-                }
-                catch (Exception ex) when (UnwrapArgumentOutOfRange(ex) is ArgumentOutOfRangeException aoore)
-                {
-                    // Deserialisers (YamlDotNet notably) wrap setter throws inside one
-                    // or more layers of their own container exception; walk the
-                    // InnerException chain so a bad-enum config surfaces the same
-                    // actionable message shape as the direct AOORE catch above.
-                    throw new ArgumentException(
-                        $"Invalid enum value in {configurationPath}: {aoore.Message}",
-                        aoore);
-                }
-                catch (Exception ex)
-                {
-                    // Parse / IO / unexpected failures preserve the null-return loader
-                    // contract, but no longer swallow silently — trace the path and
-                    // message so downstream operators see the diagnostic.
-                    Trace.TraceError($"Config load failed: {configurationPath}: {ex.Message}");
-                }
+                    return configuration;
+                });
             }
 
             return null;
@@ -591,48 +583,24 @@ namespace MTConnect.Configurations
 
             if (!string.IsNullOrEmpty(configurationPath))
             {
-                try
+                return LoadWithTriage(configurationPath, () =>
                 {
                     var text = File.ReadAllText(configurationPath);
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        var deserializer = new DeserializerBuilder()
-                            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                            .IgnoreUnmatchedProperties()
-                            .Build();
+                    if (string.IsNullOrEmpty(text)) return null;
 
-                        var configuration = (AgentConfiguration)deserializer.Deserialize(text, type);
+                    var deserializer = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .IgnoreUnmatchedProperties()
+                        .Build();
+
+                    var configuration = (AgentConfiguration)deserializer.Deserialize(text, type);
+                    if (configuration != null)
+                    {
                         configuration.Path = configurationPath;
                         configuration.Normalize();
-                        return configuration;
                     }
-                }
-                catch (ArgumentOutOfRangeException ex)
-                {
-                    // Invalid enum value in the source document — surface the actionable
-                    // setter message with the offending configuration path attached so
-                    // the operator can trace the bad key back to its file.
-                    throw new ArgumentException(
-                        $"Invalid enum value in {configurationPath}: {ex.Message}",
-                        ex);
-                }
-                catch (Exception ex) when (UnwrapArgumentOutOfRange(ex) is ArgumentOutOfRangeException aoore)
-                {
-                    // Deserialisers (YamlDotNet notably) wrap setter throws inside one
-                    // or more layers of their own container exception; walk the
-                    // InnerException chain so a bad-enum config surfaces the same
-                    // actionable message shape as the direct AOORE catch above.
-                    throw new ArgumentException(
-                        $"Invalid enum value in {configurationPath}: {aoore.Message}",
-                        aoore);
-                }
-                catch (Exception ex)
-                {
-                    // Parse / IO / unexpected failures preserve the null-return loader
-                    // contract, but no longer swallow silently — trace the path and
-                    // message so downstream operators see the diagnostic.
-                    Trace.TraceError($"Config load failed: {configurationPath}: {ex.Message}");
-                }
+                    return configuration;
+                });
             }
 
             return null;
