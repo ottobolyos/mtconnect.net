@@ -27,6 +27,9 @@
       "!libraries/MTConnect.NET-Common/Assets/**/*.g.cs",
       "!libraries/MTConnect.NET-Common/Devices/**/*.g.cs",
       "!libraries/MTConnect.NET-Common/Observations/**/*.g.cs"
+    ],
+    "ignore-mutations": [
+      "Regex"
     ]
   }
 }
