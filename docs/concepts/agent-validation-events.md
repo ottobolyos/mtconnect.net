@@ -196,10 +196,10 @@ The event family is designed to grow. When a new element class becomes validatab
        var fired = false;
        agent.InvalidDeviceModelAdded += (_, _, _) => fired = true;
 
-       var ok = agent.AddDevice(BrokenDeviceModelFixture());
+       var added = agent.AddDevice(BrokenDeviceModelFixture());
 
+       Assert.That(added, Is.Null);
        Assert.That(fired, Is.True);
-       Assert.That(ok,    Is.False);
        Assert.That(agent.GetDevices(), Is.Empty);
    }
    ```
