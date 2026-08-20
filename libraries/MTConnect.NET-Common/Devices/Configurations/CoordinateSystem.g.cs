@@ -20,41 +20,49 @@ namespace MTConnect.Devices.Configurations
         /// Natural language description of the CoordinateSystem.
         /// </summary>
         public string Description { get; set; }
+        
 
         /// <summary>
         /// Unique identifier for the coordinate system.
         /// </summary>
         public string Id { get; set; }
+        
 
         /// <summary>
         /// Name of the coordinate system.
         /// </summary>
         public string Name { get; set; }
+        
 
         /// <summary>
         /// Manufacturer's name or users name for the coordinate system.
         /// </summary>
         public string NativeName { get; set; }
+        
 
         /// <summary>
         /// Coordinates of the origin position of a coordinate system.
         /// </summary>
         public MTConnect.Devices.Configurations.IAbstractOrigin Origin { get; set; }
+        
 
         /// <summary>
         /// Id.
         /// </summary>
         public string ParentIdRef { get; set; }
+        
 
         /// <summary>
         /// Process of transforming to the origin position of the coordinate system from a parent coordinate system using Translation and Rotation.
         /// </summary>
         public MTConnect.Devices.Configurations.ITransformation Transformation { get; set; }
+        
 
         /// <summary>
         /// Type of coordinate system.
         /// </summary>
         public MTConnect.Devices.Configurations.CoordinateSystemType Type { get; set; }
+        
 
         /// <summary>
         /// UUID for the coordinate system.

@@ -20,6 +20,7 @@ namespace MTConnect.Devices.Configurations
         /// Rotations about X, Y, and Z axes are expressed in A, B, and C respectively within a 3-dimensional vector.
         /// </summary>
         public MTConnect.Devices.Configurations.IAbstractRotation Rotation { get; set; }
+        
 
         /// <summary>
         /// Translations along X, Y, and Z axes are expressed as x,y, and z respectively within a 3-dimensional vector.
