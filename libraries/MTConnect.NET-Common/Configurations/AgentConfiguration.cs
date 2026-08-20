@@ -136,19 +136,15 @@ namespace MTConnect.Configurations
 
         // Nullable backing field collapses the pre-fix pair (a non-nullable enum
         // field plus a parallel `_isDeviceValidationLevelExplicit` boolean) into a
-        // single is-explicit-or-not signal: null means "no explicit assignment,
-        // the getter reports the ctor default and Normalize will mirror IVL onto
-        // it", non-null means "explicitly assigned, do not mirror". Dime cycle-1
-        // finding M1 (simplification).
+        // single is-explicit-or-not signal: null means "no explicit assignment —
+        // the getter self-mirrors from _inputValidationLevel and Normalize will
+        // latch the same mirror into the backing field", non-null means
+        // "explicitly assigned, do not mirror". Dime cycle-1 finding M1
+        // (simplification); cycle-2 M3-C2 hardened the null branch to mirror at
+        // read time so programmatic-only callers observe the same value the
+        // load-path Normalize() would set.
         private DeviceValidationLevel? _deviceValidationLevel;
         private InputValidationLevel _inputValidationLevel;
-
-        /// <summary>
-        /// Default Device (MTConnectDevices) validation level surfaced when no
-        /// explicit assignment has been made. Kept as a named constant so
-        /// getter, ctor, and Normalize agree on the same fallback.
-        /// </summary>
-        private const DeviceValidationLevel DeviceValidationLevelDefault = DeviceValidationLevel.Warning;
 
         /// <summary>
         /// Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict.
@@ -235,12 +231,13 @@ namespace MTConnect.Configurations
             ObservationBufferSize = 131072;
             AssetBufferSize = 1024;
             DefaultVersion = MTConnectVersions.Max;
-            // Leave _deviceValidationLevel null. Going through the public setter would
-            // latch it as explicit and disable the load-time migration mirror; the
-            // getter falls back to DeviceValidationLevelDefault while the backing field
-            // is null, and Normalize's `??=` populates it from _inputValidationLevel
-            // during the load path.
-            _deviceValidationLevel = null;
+            // Leave _deviceValidationLevel null (its default). Going through the public
+            // setter would latch it as explicit and disable both the load-time
+            // migration mirror in Normalize and the read-time self-mirror in the
+            // getter — a caller that constructed with `{ InputValidationLevel = X }`
+            // would then observe Warning instead of X. Dime cycle-2 findings M3-C2
+            // (getter self-mirror) and L5-C2 (drop the redundant explicit-null
+            // assignment — `DeviceValidationLevel?` defaults to null already).
             _inputValidationLevel = InputValidationLevel.Warning;
             AllowEmptyResultForEnumEvents = false;
             ConvertUnits = true;
@@ -288,6 +285,13 @@ namespace MTConnect.Configurations
             {
                 if (current is ArgumentOutOfRangeException aoore) return aoore;
                 current = current.InnerException;
+            }
+            // Depth-cap hit: the walk gave up before finding an AOORE — trace so a
+            // pathological wrapping chain does not silently miss a bad-enum surface.
+            // Dime cycle-2 finding L2-C2.
+            if (current != null)
+            {
+                Trace.TraceWarning($"UnwrapArgumentOutOfRange: exceeded MaxUnwrapDepth={MaxUnwrapDepth}; original AOORE (if any) suppressed");
             }
             return null;
         }

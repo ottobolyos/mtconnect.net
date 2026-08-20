@@ -717,6 +717,10 @@ namespace MTConnect.Devices
             if (!Components.IsNullOrEmpty())
             {
                 var visitedIds = new HashSet<string>(StringComparer.Ordinal);
+                // Seed the visited set with this Device's own Id so a cycle back
+                // to `this` terminates immediately — parity with Component.RemoveComposition
+                // (dime cycle-2 finding L1-C2).
+                if (!string.IsNullOrEmpty(Id)) visitedIds.Add(Id);
                 foreach (var component in Components)
                 {
                     RemoveComposition(component, compositionId, visitedIds, depth: 1);
@@ -727,7 +731,11 @@ namespace MTConnect.Devices
         private void RemoveComposition(IComponent component, string compositionId, HashSet<string> visitedIds, int depth)
         {
             if (component == null) return;
-            if (depth > MaxComponentWalkDepth) return;
+            if (depth > MaxComponentWalkDepth)
+            {
+                Trace.TraceWarning($"Device.RemoveComposition: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
+                return;
+            }
 
             // Cycle guard: skip re-entry for a Component whose Id we've already
             // processed on this walk. Null-Id components fall through the guard
@@ -1111,6 +1119,10 @@ namespace MTConnect.Devices
             if (!Components.IsNullOrEmpty())
             {
                 var visitedIds = new HashSet<string>(StringComparer.Ordinal);
+                // Seed the visited set with this Device's own Id so a cycle back
+                // to `this` terminates immediately — parity with Component.RemoveDataItem
+                // (dime cycle-2 finding L1-C2).
+                if (!string.IsNullOrEmpty(Id)) visitedIds.Add(Id);
                 foreach (var component in Components)
                 {
                     RemoveDataItem(component, dataItemId, visitedIds, depth: 1);
@@ -1121,7 +1133,11 @@ namespace MTConnect.Devices
         private void RemoveDataItem(IComponent component, string dataItemId, HashSet<string> visitedIds, int depth)
         {
             if (component == null) return;
-            if (depth > MaxComponentWalkDepth) return;
+            if (depth > MaxComponentWalkDepth)
+            {
+                Trace.TraceWarning($"Device.RemoveDataItem: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
+                return;
+            }
 
             // Cycle guard — mirrors RemoveComposition.
             if (!string.IsNullOrEmpty(component.Id) && !visitedIds.Add(component.Id)) return;
