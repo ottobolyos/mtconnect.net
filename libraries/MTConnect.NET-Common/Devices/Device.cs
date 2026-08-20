@@ -1043,7 +1043,7 @@ namespace MTConnect.Devices
         /// nested child Component. The override previously skipped the Device's own
         /// DataItems collection (walking only child Components), so a DataItem added
         /// directly to a Device was unremovable — invisible to
-        /// <see cref="MTConnectAgent.NormalizeDevice"/>'s Remove branch.
+        /// <c>MTConnectAgent.NormalizeDevice</c>'s Remove branch.
         /// </summary>
         /// <param name="dataItemId">The ID of the DataItem to remove</param>
         public void RemoveDataItem(string dataItemId)
