@@ -1,6 +1,7 @@
 // Copyright (c) 2026 TrakHound Inc., All Rights Reserved.
 // TrakHound Inc. licenses this file to you under the MIT license.
 
+using System.Collections.Generic;
 using System.Linq;
 using MTConnect.Devices;
 using MTConnect.Devices.DataItems;
@@ -387,6 +388,117 @@ namespace MTConnect.NET_Common_Tests.Devices
             var remaining = device.GetCompositions();
             Assert.That(remaining == null || !remaining.Any(c => c.Id == "mid-comp"), Is.True,
                 "RemoveComposition must reach depth-2 Compositions attached to a direct child Component.");
+        }
+
+        // --------------------------------------------------------------
+        // Cycle-guard coverage — a cyclic Component graph (A→B→A) must
+        // terminate the recursive walk instead of stack-overflowing. Two
+        // paths carry a cycle guard: RemoveComposition and RemoveDataItem
+        // on both Device and Component. Each fixture below exercises one
+        // path directly; a regression to the unguarded pre-fix shape
+        // fails as a `StackOverflowException` (process abort), which
+        // NUnit surfaces as fixture-level failure.
+        // --------------------------------------------------------------
+
+        /// <summary>
+        /// Pins that <see cref="Device.RemoveComposition(string)"/> terminates on a
+        /// cyclic Component graph. The audit brief (cycle-1 finding H1) required a
+        /// visited-Id set threaded through the recursive walk so a
+        /// <c>A.Components ∋ B</c>, <c>B.Components ∋ A</c> shape does not
+        /// stack-overflow the process.
+        /// </summary>
+        [Test]
+        public void RemoveComposition_terminates_on_cyclic_Component_graph()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            var a = new Component { Id = "A", Name = "A", Type = "Axes" };
+            var b = new Component { Id = "B", Name = "B", Type = "Axes" };
+            device.AddComponent(a);
+            a.AddComponent(b);
+            // Force the cycle by direct assignment — AddComponent would reset Parent
+            // linkages but the recursive walk only reads .Components.
+            b.Components = new List<IComponent> { a };
+
+            // A no-op removal (nothing to remove) must still traverse the cyclic graph
+            // to exhaustion without recursing forever.
+            Assert.DoesNotThrow(() => device.RemoveComposition("missing"),
+                "Device.RemoveComposition must terminate on a cyclic Component graph — no StackOverflowException.");
+        }
+
+        /// <summary>
+        /// Pins that <see cref="Device.RemoveDataItem(string)"/> terminates on a
+        /// cyclic Component graph. Sibling of the RemoveComposition cycle test —
+        /// the inline recursive walk replaces the previous <see cref="Device.GetComponents()"/>
+        /// flatten, which was itself unguarded.
+        /// </summary>
+        [Test]
+        public void RemoveDataItem_terminates_on_cyclic_Component_graph()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            var a = new Component { Id = "A", Name = "A", Type = "Axes" };
+            var b = new Component { Id = "B", Name = "B", Type = "Axes" };
+            device.AddComponent(a);
+            a.AddComponent(b);
+            b.Components = new List<IComponent> { a };
+
+            Assert.DoesNotThrow(() => device.RemoveDataItem("missing"),
+                "Device.RemoveDataItem must terminate on a cyclic Component graph — no StackOverflowException.");
+        }
+
+        /// <summary>
+        /// Pins that <see cref="Component.RemoveComposition(string)"/> is now
+        /// recursive across nested child Components AND terminates on a cyclic
+        /// graph — the audit brief finding M2 called out this sibling site as
+        /// still non-recursive after the Device.cs fix. A regression that
+        /// re-strips the recursive walk fails the depth-2 removal; a regression
+        /// that reintroduces the walk without the cycle guard fails the
+        /// termination assertion.
+        /// </summary>
+        [Test]
+        public void Component_RemoveComposition_reaches_nested_and_terminates_on_cycle()
+        {
+            var root = new Component { Id = "root", Name = "root", Type = "Axes" };
+            var child = new Component { Id = "child", Name = "child", Type = "Axes" };
+            child.AddComposition(new Composition { Id = "nested-comp", Name = "nested-comp", Type = "Generic" });
+            root.AddComponent(child);
+
+            root.RemoveComposition("nested-comp");
+
+            Assert.That(
+                child.Compositions == null || !child.Compositions.Any(c => c.Id == "nested-comp"),
+                Is.True,
+                "Component.RemoveComposition must reach a Composition nested on a direct child Component.");
+
+            // Cycle graph: root→cycleA→cycleB→cycleA
+            var cycleA = new Component { Id = "cycleA", Name = "cycleA", Type = "Axes" };
+            var cycleB = new Component { Id = "cycleB", Name = "cycleB", Type = "Axes" };
+            root.AddComponent(cycleA);
+            cycleA.AddComponent(cycleB);
+            cycleB.Components = new List<IComponent> { cycleA };
+
+            Assert.DoesNotThrow(() => root.RemoveComposition("missing"),
+                "Component.RemoveComposition must terminate on a cyclic Component graph — no StackOverflowException.");
+        }
+
+        /// <summary>
+        /// Pins that <see cref="Component.RemoveDataItem(string)"/> terminates on
+        /// a cyclic Component graph. Sibling of the Component.RemoveComposition
+        /// cycle test — the inline recursive walk replaces the previous
+        /// <see cref="Component.GetComponents()"/> flatten, which was itself
+        /// unguarded.
+        /// </summary>
+        [Test]
+        public void Component_RemoveDataItem_terminates_on_cyclic_Component_graph()
+        {
+            var root = new Component { Id = "root", Name = "root", Type = "Axes" };
+            var a = new Component { Id = "A", Name = "A", Type = "Axes" };
+            var b = new Component { Id = "B", Name = "B", Type = "Axes" };
+            root.AddComponent(a);
+            a.AddComponent(b);
+            b.Components = new List<IComponent> { root };
+
+            Assert.DoesNotThrow(() => root.RemoveDataItem("missing"),
+                "Component.RemoveDataItem must terminate on a cyclic Component graph — no StackOverflowException.");
         }
     }
 }

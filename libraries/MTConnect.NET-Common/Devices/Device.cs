@@ -658,10 +658,23 @@ namespace MTConnect.Devices
 
 
         /// <summary>
+        /// Maximum recursion depth for Component-tree walks — belt-and-braces
+        /// guard alongside the visited-Id cycle set. A well-formed MTConnect
+        /// device model is nowhere near this deep; hitting the ceiling implies
+        /// either a pathological synthetic input or a cyclic model that the
+        /// visited-Id set failed to catch (for example, every component in the
+        /// cycle carrying a null Id).
+        /// </summary>
+        private const int MaxComponentWalkDepth = 1024;
+
+        /// <summary>
         /// Remove a Composition from the Device tree — top-level and every nested
         /// child Component. Mirrors the recursive shape of <see cref="RemoveComponent(string)"/>
         /// so that a Composition located via the recursive <see cref="GetCompositions"/>
-        /// pathway is actually removed regardless of depth.
+        /// pathway is actually removed regardless of depth. The traversal carries
+        /// a visited-Id cycle guard so a cyclic Component graph
+        /// (<c>A.Components ∋ B</c>, <c>B.Components ∋ A</c>) terminates instead of
+        /// stack-overflowing.
         /// </summary>
         /// <param name="compositionId">The ID of the Composition to remove</param>
         public void RemoveComposition(string compositionId)
@@ -679,16 +692,24 @@ namespace MTConnect.Devices
             // Nested Compositions on every child Component (recursive).
             if (!Components.IsNullOrEmpty())
             {
+                var visitedIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var component in Components)
                 {
-                    RemoveComposition(component, compositionId);
+                    RemoveComposition(component, compositionId, visitedIds, depth: 1);
                 }
             }
         }
 
-        private void RemoveComposition(IComponent component, string compositionId)
+        private void RemoveComposition(IComponent component, string compositionId, HashSet<string> visitedIds, int depth)
         {
             if (component == null) return;
+            if (depth > MaxComponentWalkDepth) return;
+
+            // Cycle guard: skip re-entry for a Component whose Id we've already
+            // processed on this walk. Null-Id components fall through the guard
+            // (nothing to add to the set) but the depth ceiling still terminates
+            // pathological cyclic-null-Id chains.
+            if (!string.IsNullOrEmpty(component.Id) && !visitedIds.Add(component.Id)) return;
 
             if (!component.Compositions.IsNullOrEmpty())
             {
@@ -707,7 +728,7 @@ namespace MTConnect.Devices
             {
                 foreach (var subComponent in component.Components)
                 {
-                    RemoveComposition(subComponent, compositionId);
+                    RemoveComposition(subComponent, compositionId, visitedIds, depth + 1);
                 }
             }
         }
@@ -1043,7 +1064,11 @@ namespace MTConnect.Devices
         /// nested child Component. The override previously skipped the Device's own
         /// DataItems collection (walking only child Components), so a DataItem added
         /// directly to a Device was unremovable — invisible to
-        /// <c>MTConnectAgent.NormalizeDevice</c>'s Remove branch.
+        /// <c>MTConnectAgent.NormalizeDevice</c>'s Remove branch. The traversal uses
+        /// an inline recursive walk (not the previous <see cref="GetComponents()"/>
+        /// flatten) so it can carry the same visited-Id cycle guard as
+        /// <see cref="RemoveComposition(string)"/>; a cyclic Component graph
+        /// terminates instead of stack-overflowing.
         /// </summary>
         /// <param name="dataItemId">The ID of the DataItem to remove</param>
         public void RemoveDataItem(string dataItemId)
@@ -1058,19 +1083,38 @@ namespace MTConnect.Devices
                 DataItems = dataItems;
             }
 
-            // Child Components' DataItems.
-            var components = GetComponents();
-            if (!components.IsNullOrEmpty())
+            // Child Components' DataItems, walked with an explicit cycle guard.
+            if (!Components.IsNullOrEmpty())
             {
-                foreach (var component in components)
+                var visitedIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var component in Components)
                 {
-                    if (!component.DataItems.IsNullOrEmpty())
-                    {
-                        var dataItems = new List<IDataItem>();
-                        dataItems.AddRange(component.DataItems);
-                        dataItems.RemoveAll(o => o.Id == dataItemId);
-                        component.DataItems = dataItems;
-                    }
+                    RemoveDataItem(component, dataItemId, visitedIds, depth: 1);
+                }
+            }
+        }
+
+        private void RemoveDataItem(IComponent component, string dataItemId, HashSet<string> visitedIds, int depth)
+        {
+            if (component == null) return;
+            if (depth > MaxComponentWalkDepth) return;
+
+            // Cycle guard — mirrors RemoveComposition.
+            if (!string.IsNullOrEmpty(component.Id) && !visitedIds.Add(component.Id)) return;
+
+            if (!component.DataItems.IsNullOrEmpty())
+            {
+                var dataItems = new List<IDataItem>();
+                dataItems.AddRange(component.DataItems);
+                dataItems.RemoveAll(o => o.Id == dataItemId);
+                component.DataItems = dataItems;
+            }
+
+            if (!component.Components.IsNullOrEmpty())
+            {
+                foreach (var subComponent in component.Components)
+                {
+                    RemoveDataItem(subComponent, dataItemId, visitedIds, depth + 1);
                 }
             }
         }
