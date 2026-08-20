@@ -4,6 +4,7 @@
 using MTConnect.Devices.Components;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace MTConnect.Devices
@@ -424,7 +425,15 @@ namespace MTConnect.Devices
 
 
         /// <summary>
-        /// Remove a Component from the Device
+        /// Remove a Component from the Device tree — the top-level
+        /// <see cref="Component.Components"/> collection on the Device itself and
+        /// every nested descendant Component. The traversal carries a visited-Id
+        /// cycle guard so a cyclic Component graph (<c>A.Components ∋ B</c>,
+        /// <c>B.Components ∋ A</c>) terminates instead of stack-overflowing —
+        /// mirrors the shape of <see cref="RemoveComposition(string)"/> and
+        /// <see cref="RemoveDataItem(string)"/> so all three Remove* overloads
+        /// on Device share the same DoS-resistance contract exercised by
+        /// <c>MTConnectAgent.NormalizeDevice</c> on Strict validation.
         /// </summary>
         /// <param name="componentId">The ID of the Component to remove</param>
         public void RemoveComponent(string componentId)
@@ -436,18 +445,33 @@ namespace MTConnect.Devices
 
                 components.RemoveAll(o => o.Id == componentId);
 
+                var visitedIds = new HashSet<string>(StringComparer.Ordinal);
+                // Seed the visited set with this Device's own Id so a cycle
+                // back to `this` terminates immediately — parity with
+                // RemoveComposition / RemoveDataItem.
+                if (!string.IsNullOrEmpty(Id)) visitedIds.Add(Id);
                 foreach (var subComponent in components)
                 {
-                    RemoveComponent(subComponent, componentId);
+                    RemoveComponent(subComponent, componentId, visitedIds, depth: 1);
                 }
 
                 Components = components;
             }
         }
 
-        private void RemoveComponent(IComponent component, string componentId)
+        private void RemoveComponent(IComponent component, string componentId, HashSet<string> visitedIds, int depth)
         {
-            if (component != null && !component.Components.IsNullOrEmpty())
+            if (component == null) return;
+            if (depth > MaxComponentWalkDepth)
+            {
+                Trace.TraceWarning($"Device.RemoveComponent: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
+                return;
+            }
+
+            // Cycle guard — mirrors RemoveComposition / RemoveDataItem.
+            if (!string.IsNullOrEmpty(component.Id) && !visitedIds.Add(component.Id)) return;
+
+            if (!component.Components.IsNullOrEmpty())
             {
                 var components = new List<IComponent>();
                 components.AddRange(component.Components);
@@ -455,7 +479,7 @@ namespace MTConnect.Devices
 
                 foreach (var subComponent in components)
                 {
-                    RemoveComponent(subComponent, componentId);
+                    RemoveComponent(subComponent, componentId, visitedIds, depth + 1);
                 }
 
                 ((Component)component).Components = components;

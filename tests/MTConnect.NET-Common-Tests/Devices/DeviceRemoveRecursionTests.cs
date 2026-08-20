@@ -446,6 +446,31 @@ namespace MTConnect.NET_Common_Tests.Devices
         }
 
         /// <summary>
+        /// Pins that <see cref="Device.RemoveComponent(string)"/> terminates on a
+        /// cyclic Component graph. Sibling of the RemoveComposition /
+        /// RemoveDataItem cycle tests — dime cycle-2 finding H1-C2 called out
+        /// this Remove* variant as still lacking the visited-Id + depth-cap
+        /// guard the other two variants received in cycle-1 H1. The callsite
+        /// on Strict validation is <c>MTConnectAgent.NormalizeDevice</c>
+        /// (<c>obj.RemoveComponent(genericComponent.Id)</c>); a cyclic
+        /// Component graph coming through that path would stack-overflow the
+        /// process without this guard.
+        /// </summary>
+        [Test]
+        public void RemoveComponent_terminates_on_cyclic_Component_graph()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            var a = new Component { Id = "A", Name = "A", Type = "Axes" };
+            var b = new Component { Id = "B", Name = "B", Type = "Axes" };
+            device.AddComponent(a);
+            a.AddComponent(b);
+            b.Components = new List<IComponent> { a };
+
+            Assert.DoesNotThrow(() => device.RemoveComponent("missing"),
+                "Device.RemoveComponent must terminate on a cyclic Component graph — no StackOverflowException.");
+        }
+
+        /// <summary>
         /// Pins that <see cref="Component.RemoveComposition(string)"/> is now
         /// recursive across nested child Components AND terminates on a cyclic
         /// graph — the audit brief finding M2 called out this sibling site as
