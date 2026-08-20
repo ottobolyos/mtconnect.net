@@ -164,7 +164,15 @@ namespace MTConnect.Configurations
         [JsonPropertyName("deviceValidationLevel")]
         public DeviceValidationLevel DeviceValidationLevel
         {
-            get => _deviceValidationLevel ?? DeviceValidationLevelDefault;
+            // Self-computed mirror in the null case — a caller that sets
+            // `InputValidationLevel = Strict` on a fresh AgentConfiguration and
+            // reads `DeviceValidationLevel` before calling Normalize() sees the
+            // mirrored value (Strict), not the bare Warning default. Normalize()
+            // still latches the mirror into the backing field so post-Normalize
+            // serialisation carries the concrete value rather than null. Dime
+            // cycle-2 finding M3-C2 — closes the programmatic-only footgun the
+            // load-path Normalize() call papered over.
+            get => _deviceValidationLevel ?? (DeviceValidationLevel)(int)_inputValidationLevel;
             set
             {
                 ThrowIfUndefined(
