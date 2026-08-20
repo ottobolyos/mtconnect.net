@@ -3,6 +3,7 @@
 
 using System;
 using System.IO;
+using System.Reflection;
 using MTConnect.Agents;
 using MTConnect.Configurations;
 using NUnit.Framework;
@@ -517,6 +518,134 @@ namespace MTConnect.Tests.Common.Configurations
             {
                 File.Delete(path);
             }
+        }
+
+        // ---------------------------------------------------------------
+        // UnwrapArgumentOutOfRange — private helper depth-bound pins
+        // ---------------------------------------------------------------
+        //
+        // The H2 fix introduces a private static helper `UnwrapArgumentOutOfRange(Exception)`
+        // on <see cref="AgentConfiguration"/> that walks the <see cref="Exception.InnerException"/>
+        // chain looking for an <see cref="ArgumentOutOfRangeException"/> — deserialisers
+        // (YamlDotNet notably) nest the setter throw inside their own container. The walk
+        // is depth-bounded at MaxUnwrapDepth = 16 to defend against a pathological deeply-
+        // nested chain looping forever. The public YAML load path only produces a chain
+        // of depth 2-3 so it cannot exercise the depth ceiling; these fixtures pin the
+        // ceiling directly via reflection so a regression that removes the ceiling
+        // (introducing an unbounded loop) OR bumps it to a different value fails loudly.
+
+        private static ArgumentOutOfRangeException? InvokeUnwrap(Exception ex)
+        {
+            var method = typeof(AgentConfiguration).GetMethod(
+                "UnwrapArgumentOutOfRange",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null,
+                "UnwrapArgumentOutOfRange must exist as a static non-public helper on AgentConfiguration — the H2 fix contract.");
+            return (ArgumentOutOfRangeException?)method!.Invoke(null, new object?[] { ex });
+        }
+
+        private static Exception BuildWrappedChain(Exception innermost, int wrapCount)
+        {
+            var current = innermost;
+            for (var i = 0; i < wrapCount; i++)
+            {
+                current = new InvalidOperationException($"wrap-{i}", current);
+            }
+            return current;
+        }
+
+        /// <summary>
+        /// Pins that <c>UnwrapArgumentOutOfRange</c> returns the AOORE when it sits
+        /// exactly at the surface (depth 0). The direct <c>catch (ArgumentOutOfRangeException)</c>
+        /// filter should hit before this helper runs in the loader, but the helper
+        /// must still handle a depth-0 chain because <see cref="Exception.InnerException"/>
+        /// walks include their own root.
+        /// </summary>
+        [Test]
+        public void UnwrapArgumentOutOfRange_Returns_Root_When_Root_Is_AOORE()
+        {
+            var aoore = new ArgumentOutOfRangeException("value", "root");
+
+            var result = InvokeUnwrap(aoore);
+
+            Assert.That(result, Is.SameAs(aoore),
+                "the helper must return the AOORE when it sits at depth 0 (root).");
+        }
+
+        /// <summary>
+        /// Pins that <c>UnwrapArgumentOutOfRange</c> returns the AOORE when it sits
+        /// at exactly the deepest depth the ceiling still visits — the loop iterates
+        /// <c>i = 0..15</c>, checking depths 0..15 inclusive. AOORE at depth 15 is
+        /// visited on iteration 15 and returned; AOORE at depth 16 is never visited
+        /// (loop exits after iteration 15 before advancing to depth 16).
+        /// </summary>
+        [Test]
+        public void UnwrapArgumentOutOfRange_Finds_AOORE_At_Ceiling_Depth_Fifteen()
+        {
+            // 15 wrappers around the AOORE puts the AOORE at depth 15 from the outer root.
+            var aoore = new ArgumentOutOfRangeException("value", "deep-15");
+            var chain = BuildWrappedChain(aoore, wrapCount: 15);
+
+            var result = InvokeUnwrap(chain);
+
+            Assert.That(result, Is.SameAs(aoore),
+                "the helper must find the AOORE at depth 15 — the deepest depth the MaxUnwrapDepth = 16 loop still visits (i = 15).");
+        }
+
+        /// <summary>
+        /// Pins that <c>UnwrapArgumentOutOfRange</c> returns null when the AOORE sits
+        /// past the depth ceiling — the loop bails after 16 iterations without walking
+        /// to depth 16 or beyond. A regression that removes the bound and loops until
+        /// InnerException is null would find the AOORE at depth 20 and return it — that
+        /// would satisfy the H2 unwrap contract but violate the depth-guard invariant
+        /// against pathological chains. The FLOOR pins the exact ceiling.
+        /// </summary>
+        [Test]
+        public void UnwrapArgumentOutOfRange_Returns_Null_When_AOORE_Sits_Past_Depth_Ceiling()
+        {
+            var aoore = new ArgumentOutOfRangeException("value", "deep-20");
+            var chain = BuildWrappedChain(aoore, wrapCount: 20);
+
+            var result = InvokeUnwrap(chain);
+
+            Assert.That(result, Is.Null,
+                "the helper must NOT walk past MaxUnwrapDepth = 16 — an AOORE at depth 20 must return null so a pathological deeply-nested chain never loops forever.");
+        }
+
+        /// <summary>
+        /// Pins that <c>UnwrapArgumentOutOfRange</c> returns null on a chain that
+        /// contains no AOORE at any depth. The loader relies on this null-return to
+        /// distinguish an enum-out-of-range setter throw from a generic parser /
+        /// IO failure — the former is rethrown as ArgumentException, the latter is
+        /// traced and null-returned per the loader contract. A regression that
+        /// returned the outermost exception on a no-match walk would misroute
+        /// generic failures into the enum-error path.
+        /// </summary>
+        [Test]
+        public void UnwrapArgumentOutOfRange_Returns_Null_On_Chain_Without_AOORE()
+        {
+            var innermost = new InvalidOperationException("innermost");
+            var chain = BuildWrappedChain(innermost, wrapCount: 5);
+
+            var result = InvokeUnwrap(chain);
+
+            Assert.That(result, Is.Null,
+                "the helper must return null when the InnerException chain contains no AOORE — the loader routes non-enum failures to the trace-and-return-null path.");
+        }
+
+        /// <summary>
+        /// Pins that <c>UnwrapArgumentOutOfRange</c> returns null when handed a null
+        /// exception. The current implementation guards via the loop condition
+        /// (<c>current != null</c>) so the method is null-safe. A regression that
+        /// dereferenced the parameter before the guard would NRE on this input.
+        /// </summary>
+        [Test]
+        public void UnwrapArgumentOutOfRange_Returns_Null_On_Null_Input()
+        {
+            var result = InvokeUnwrap(null!);
+
+            Assert.That(result, Is.Null,
+                "the helper must be null-safe — the loop condition current != null guards the very first iteration.");
         }
 
         // ---------------------------------------------------------------

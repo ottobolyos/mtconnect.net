@@ -500,5 +500,181 @@ namespace MTConnect.NET_Common_Tests.Devices
             Assert.DoesNotThrow(() => root.RemoveDataItem("missing"),
                 "Component.RemoveDataItem must terminate on a cyclic Component graph — no StackOverflowException.");
         }
+
+        // --------------------------------------------------------------
+        // MaxComponentWalkDepth = 1024 — belt-and-braces depth ceiling.
+        // The visited-Id HashSet catches ordinary cycles; the depth
+        // ceiling defends against pathological cases the HashSet cannot
+        // prune (for example every Component in the cycle carrying a
+        // null Id so nothing gets added to the set). A deep linear
+        // chain of unique-Id Components exercises the depth ceiling
+        // exclusively — the HashSet always .Add-returns true so only
+        // the `depth > MaxComponentWalkDepth` early-return terminates.
+        //
+        // The loop walks depth 1..1024 (inclusive) and returns early
+        // at depth 1025 — placing a Composition on the component at
+        // depth 1000 verifies the walk reaches within the ceiling
+        // (removed), placing another at depth 1030 verifies the walk
+        // does NOT reach past the ceiling (survives). A regression
+        // that raises or removes the ceiling makes the depth-1030
+        // arm fail; a regression that lowers the ceiling makes the
+        // depth-1000 arm fail. Two-arm construction pins the exact
+        // ceiling value.
+        // --------------------------------------------------------------
+
+        private static Device BuildLinearDeepDevice(int chainLength, int shallowIndex, int deepIndex,
+            out string shallowTargetId, out string deepTargetId,
+            out Component shallowLeaf, out Component deepLeaf)
+        {
+            shallowTargetId = "target-shallow";
+            deepTargetId = "target-deep";
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            Component parent = null!;
+            Component capturedShallow = null!;
+            Component capturedDeep = null!;
+            for (var i = 0; i < chainLength; i++)
+            {
+                var c = new Component { Id = $"c-{i}", Name = $"c-{i}", Type = "Axes" };
+                if (i == 0) device.AddComponent(c);
+                else parent!.AddComponent(c);
+                parent = c;
+
+                if (i == shallowIndex)
+                {
+                    c.AddComposition(new Composition
+                    {
+                        Id = shallowTargetId,
+                        Name = shallowTargetId,
+                        Type = "Generic"
+                    });
+                    capturedShallow = c;
+                }
+                if (i == deepIndex)
+                {
+                    c.AddComposition(new Composition
+                    {
+                        Id = deepTargetId,
+                        Name = deepTargetId,
+                        Type = "Generic"
+                    });
+                    capturedDeep = c;
+                }
+            }
+            shallowLeaf = capturedShallow;
+            deepLeaf = capturedDeep;
+            return device;
+        }
+
+        /// <summary>
+        /// Pins <c>MaxComponentWalkDepth = 1024</c> on <see cref="Device.RemoveComposition(string)"/>.
+        /// Component c-999 sits at depth 1000 from Device (within the ceiling) and
+        /// c-1029 sits at depth 1030 (past the ceiling). A single Remove call must
+        /// process the shallow arm (removed) and skip the deep arm (survives)
+        /// because the recursive helper returns early at depth 1025 — the frame
+        /// on c-1024 is entered but bails before touching its children.
+        /// </summary>
+        [Test]
+        public void RemoveComposition_depth_ceiling_removes_within_1024_leaves_past_1024_intact()
+        {
+            var device = BuildLinearDeepDevice(chainLength: 1030,
+                shallowIndex: 999, deepIndex: 1029,
+                out var shallowId, out var deepId,
+                out var shallowLeaf, out var deepLeaf);
+
+            // Precondition — both targets are present before the removal.
+            Assert.That(shallowLeaf.Compositions.Any(c => c.Id == shallowId), Is.True,
+                "precondition — the shallow target Composition must be attached at depth 1000.");
+            Assert.That(deepLeaf.Compositions.Any(c => c.Id == deepId), Is.True,
+                "precondition — the deep target Composition must be attached at depth 1030.");
+
+            // Remove the shallow target — expected to succeed.
+            device.RemoveComposition(shallowId);
+            Assert.That(
+                shallowLeaf.Compositions == null || !shallowLeaf.Compositions.Any(c => c.Id == shallowId),
+                Is.True,
+                "Device.RemoveComposition must reach depth 1000 (within MaxComponentWalkDepth = 1024) and drop the shallow target.");
+
+            // Remove the deep target — expected to be a no-op because the depth
+            // ceiling stops the walk before reaching depth 1030.
+            device.RemoveComposition(deepId);
+            Assert.That(
+                deepLeaf.Compositions.Any(c => c.Id == deepId), Is.True,
+                "Device.RemoveComposition must NOT reach past MaxComponentWalkDepth = 1024 — the belt-and-braces depth guard leaves depth-1030 Compositions intact so a pathological deeply-nested (or null-Id-cyclic) graph cannot exhaust the process stack.");
+        }
+
+        /// <summary>
+        /// Sibling pin for <see cref="Device.RemoveDataItem(string)"/>. Same
+        /// two-arm shape via DataItems attached to the shallow and deep leaves —
+        /// the DataItem walk shares <c>MaxComponentWalkDepth = 1024</c> with the
+        /// Composition walk.
+        /// </summary>
+        [Test]
+        public void RemoveDataItem_depth_ceiling_removes_within_1024_leaves_past_1024_intact()
+        {
+            var device = BuildLinearDeepDevice(chainLength: 1030,
+                shallowIndex: 999, deepIndex: 1029,
+                out _, out _,
+                out var shallowLeaf, out var deepLeaf);
+
+            const string shallowDi = "di-shallow";
+            const string deepDi = "di-deep";
+            shallowLeaf.AddDataItem(new DataItem { Id = shallowDi, Name = shallowDi, Type = "Generic", Category = DataItemCategory.EVENT });
+            deepLeaf.AddDataItem(new DataItem { Id = deepDi, Name = deepDi, Type = "Generic", Category = DataItemCategory.EVENT });
+
+            device.RemoveDataItem(shallowDi);
+            Assert.That(
+                shallowLeaf.DataItems == null || !shallowLeaf.DataItems.Any(d => d.Id == shallowDi),
+                Is.True,
+                "Device.RemoveDataItem must reach depth 1000 (within MaxComponentWalkDepth = 1024) and drop the shallow DataItem.");
+
+            device.RemoveDataItem(deepDi);
+            Assert.That(
+                deepLeaf.DataItems.Any(d => d.Id == deepDi), Is.True,
+                "Device.RemoveDataItem must NOT reach past MaxComponentWalkDepth = 1024 — DataItems attached at depth 1030 must survive so the belt-and-braces depth ceiling is exercised.");
+        }
+
+        /// <summary>
+        /// Sibling pin for <see cref="Component.RemoveComposition(string)"/> —
+        /// the Component-side ceiling constant is defined in Component.cs
+        /// independently of Device.cs, so a regression that bumps only the
+        /// Device.cs constant while leaving Component.cs stale (or vice versa)
+        /// fails on the sibling that still enforces 1024.
+        /// </summary>
+        [Test]
+        public void Component_RemoveComposition_depth_ceiling_leaves_past_1024_intact()
+        {
+            // Rooted at a Component this time, not a Device.
+            var root = new Component { Id = "root", Name = "root", Type = "Axes" };
+            Component parent = root;
+            Component shallowLeaf = null!;
+            Component deepLeaf = null!;
+            for (var i = 0; i < 1030; i++)
+            {
+                var c = new Component { Id = $"c-{i}", Name = $"c-{i}", Type = "Axes" };
+                parent.AddComponent(c);
+                parent = c;
+                if (i == 999)
+                {
+                    c.AddComposition(new Composition { Id = "target-shallow", Name = "target-shallow", Type = "Generic" });
+                    shallowLeaf = c;
+                }
+                if (i == 1029)
+                {
+                    c.AddComposition(new Composition { Id = "target-deep", Name = "target-deep", Type = "Generic" });
+                    deepLeaf = c;
+                }
+            }
+
+            root.RemoveComposition("target-shallow");
+            Assert.That(
+                shallowLeaf.Compositions == null || !shallowLeaf.Compositions.Any(c => c.Id == "target-shallow"),
+                Is.True,
+                "Component.RemoveComposition must reach depth 1000 (within MaxComponentWalkDepth = 1024) and drop the shallow target.");
+
+            root.RemoveComposition("target-deep");
+            Assert.That(
+                deepLeaf.Compositions.Any(c => c.Id == "target-deep"), Is.True,
+                "Component.RemoveComposition must NOT reach past MaxComponentWalkDepth = 1024 — the Component-side ceiling constant must stay in sync with the Device-side ceiling.");
+        }
     }
 }
