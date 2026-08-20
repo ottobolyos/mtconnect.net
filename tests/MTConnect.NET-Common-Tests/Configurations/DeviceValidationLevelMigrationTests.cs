@@ -186,6 +186,260 @@ namespace MTConnect.Tests.Common.Configurations
             Assert.That(config.DeviceValidationLevel, Is.EqualTo(arm));
         }
 
+        /// <summary>
+        /// Positive-arm coverage FLOOR for <see cref="InputValidationLevel"/>.
+        /// The sibling assertion for <c>DeviceValidationLevel</c> above ensured no
+        /// false-positive rejections; the parallel <c>InputValidationLevel</c>
+        /// setter uses the same <c>Enum.IsDefined</c> guard (AgentConfiguration.cs:176)
+        /// and must be pinned identically so a regression that widens or narrows
+        /// the accepted arm set on the input axis fails loudly.
+        /// </summary>
+        [TestCase(InputValidationLevel.Ignore)]
+        [TestCase(InputValidationLevel.Warning)]
+        [TestCase(InputValidationLevel.Remove)]
+        [TestCase(InputValidationLevel.Strict)]
+        public void InputValidationLevel_Setter_Accepts_Every_Defined_Arm(InputValidationLevel arm)
+        {
+            var config = new AgentConfiguration();
+            Assert.DoesNotThrow(() => config.InputValidationLevel = arm);
+            Assert.That(config.InputValidationLevel, Is.EqualTo(arm));
+        }
+
+        /// <summary>
+        /// Boundary coverage FLOOR for the <see cref="DeviceValidationLevel"/> setter guard
+        /// (AgentConfiguration.cs:151). The setter uses <see cref="Enum.IsDefined(Type, object)"/>
+        /// which rejects EVERY ordinal that is not a defined arm — the surviving valid arms
+        /// are 0..3. Pin the four boundary shapes the FLOOR names — negative one, first
+        /// invalid over-max ordinal, and the two integer extremes — so a regression that
+        /// swaps <c>IsDefined</c> for a permissive range check (for example <c>value &lt;= Strict</c>,
+        /// which would accept -1) fails on the first case rather than sneaking past the
+        /// existing single (42) coverage.
+        /// </summary>
+        [TestCase(-1)]
+        [TestCase(4)]
+        [TestCase(int.MinValue)]
+        [TestCase(int.MaxValue)]
+        public void DeviceValidationLevel_Setter_Rejects_Out_Of_Range_Boundary(int ordinal)
+        {
+            var config = new AgentConfiguration();
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => config.DeviceValidationLevel = (DeviceValidationLevel)ordinal,
+                $"DeviceValidationLevel setter must reject ordinal {ordinal} — Enum.IsDefined guard is strict against every value outside 0..3.");
+        }
+
+        /// <summary>
+        /// Boundary coverage FLOOR for the <see cref="InputValidationLevel"/> setter guard
+        /// (AgentConfiguration.cs:176). Same four shapes as the DeviceValidationLevel
+        /// boundary — the guard is textually identical and must stay strict on both axes.
+        /// </summary>
+        [TestCase(-1)]
+        [TestCase(4)]
+        [TestCase(int.MinValue)]
+        [TestCase(int.MaxValue)]
+        public void InputValidationLevel_Setter_Rejects_Out_Of_Range_Boundary(int ordinal)
+        {
+            var config = new AgentConfiguration();
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => config.InputValidationLevel = (InputValidationLevel)ordinal,
+                $"InputValidationLevel setter must reject ordinal {ordinal} — Enum.IsDefined guard is strict against every value outside 0..3.");
+        }
+
+        /// <summary>
+        /// Pins the setter exception shape — <c>paramName</c> is <c>"value"</c> and the
+        /// <c>ActualValue</c> carries the offending enum ordinal so callers logging the
+        /// exception get the diagnostic. A regression that throws a bare
+        /// <c>ArgumentException</c> (dropping the paramName / actual-value tuple) would
+        /// still satisfy the coarser <c>Assert.Throws&lt;ArgumentOutOfRangeException&gt;</c>
+        /// gates above only because ArgumentOutOfRangeException derives from
+        /// ArgumentException — but the message shape carrying the two documented pieces of
+        /// diagnostic is a contract callers depend on. This test pins that shape.
+        /// </summary>
+        [Test]
+        public void DeviceValidationLevel_Setter_Exception_Carries_ParamName_And_ActualValue()
+        {
+            var config = new AgentConfiguration();
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(
+                () => config.DeviceValidationLevel = (DeviceValidationLevel)99);
+
+            Assert.That(ex!.ParamName, Is.EqualTo("value"),
+                "paramName is a documented invariant — subscribers log it verbatim.");
+            Assert.That(ex.ActualValue, Is.EqualTo((DeviceValidationLevel)99),
+                "ActualValue carries the offending ordinal so the diagnostic names the caller's mistake.");
+            Assert.That(ex.Message, Does.Contain("DeviceValidationLevel"),
+                "Message must name the enum so subscribers can distinguish DVL vs IVL failures.");
+        }
+
+        /// <summary>Same exception-shape pin as above, but for <see cref="InputValidationLevel"/>.</summary>
+        [Test]
+        public void InputValidationLevel_Setter_Exception_Carries_ParamName_And_ActualValue()
+        {
+            var config = new AgentConfiguration();
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(
+                () => config.InputValidationLevel = (InputValidationLevel)99);
+
+            Assert.That(ex!.ParamName, Is.EqualTo("value"));
+            Assert.That(ex.ActualValue, Is.EqualTo((InputValidationLevel)99));
+            Assert.That(ex.Message, Does.Contain("InputValidationLevel"));
+        }
+
+        // ---------------------------------------------------------------
+        // Direct Normalize() — every arm, not just Remove
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Pins the programmatic-<see cref="AgentConfiguration.Normalize"/> mirror across
+        /// every <see cref="InputValidationLevel"/> arm — not just <c>Remove</c> as the
+        /// original single test covered. The <c>ReadJson</c>-driven parametrised test
+        /// above exercises the mirror THROUGH the loader; this test exercises the mirror
+        /// DIRECTLY so a regression that skips the mirror on a specific arm (for example
+        /// an off-by-one enum-cast bug producing wrong ordinals for arms 0 or 3) fails
+        /// on the pinned arm rather than being masked by the ordinal happening to align.
+        /// </summary>
+        [TestCase(InputValidationLevel.Ignore, DeviceValidationLevel.Ignore)]
+        [TestCase(InputValidationLevel.Warning, DeviceValidationLevel.Warning)]
+        [TestCase(InputValidationLevel.Remove, DeviceValidationLevel.Remove)]
+        [TestCase(InputValidationLevel.Strict, DeviceValidationLevel.Strict)]
+        public void Normalize_Mirrors_Every_InputValidationLevel_Arm(
+            InputValidationLevel input,
+            DeviceValidationLevel expectedMirrored)
+        {
+            var config = new AgentConfiguration();
+            config.InputValidationLevel = input;
+
+            config.Normalize();
+
+            Assert.That(config.DeviceValidationLevel, Is.EqualTo(expectedMirrored),
+                $"Normalize must mirror InputValidationLevel.{input} onto DeviceValidationLevel.{expectedMirrored} because DeviceValidationLevel was never assigned explicitly.");
+        }
+
+        /// <summary>
+        /// Pins Normalize idempotency: calling <see cref="AgentConfiguration.Normalize"/>
+        /// a second time is a stable no-op — the DeviceValidationLevel value is the
+        /// mirrored value, not the ctor default. A regression that reset
+        /// <c>_isDeviceValidationLevelExplicit</c> inside Normalize (making the
+        /// mirror re-fire) would silently overwrite a subsequent explicit assignment;
+        /// pinning idempotency catches that class of bug.
+        /// </summary>
+        [Test]
+        public void Normalize_Is_Idempotent_On_Repeat_Calls()
+        {
+            var config = new AgentConfiguration();
+            config.InputValidationLevel = InputValidationLevel.Strict;
+
+            config.Normalize();
+            Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Strict),
+                "first Normalize mirrors the input axis onto the device axis.");
+
+            config.Normalize();
+            Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Strict),
+                "second Normalize must be a stable no-op — the mirrored value must not regress to the ctor default.");
+        }
+
+        /// <summary>
+        /// Pins that setting <see cref="AgentConfiguration.InputValidationLevel"/>
+        /// AFTER an explicit <see cref="AgentConfiguration.DeviceValidationLevel"/>
+        /// assignment does NOT re-arm the mirror. The
+        /// <c>_isDeviceValidationLevelExplicit</c> flag is set by the DVL setter
+        /// and never cleared by the IVL setter — a caller who explicitly set DVL
+        /// then later set IVL must not have DVL silently overwritten on the next
+        /// Normalize call.
+        /// </summary>
+        [Test]
+        public void Normalize_Explicit_DeviceValidationLevel_Then_Later_InputValidationLevel_Assignment_Does_Not_Rearm_Mirror()
+        {
+            var config = new AgentConfiguration();
+            config.DeviceValidationLevel = DeviceValidationLevel.Ignore;
+            // The DVL setter marked _isDeviceValidationLevelExplicit=true. Later IVL assignment
+            // must not clear that latch.
+            config.InputValidationLevel = InputValidationLevel.Strict;
+
+            config.Normalize();
+
+            Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Ignore),
+                "later InputValidationLevel assignment must not re-arm the mirror — the explicit-DVL latch is sticky.");
+        }
+
+        /// <summary>
+        /// Pins sticky suppression across every <see cref="DeviceValidationLevel"/> arm —
+        /// the existing single-arm sticky-suppression test only covered
+        /// <c>Strict → Ignore</c>. A regression that clears <c>_isDeviceValidationLevelExplicit</c>
+        /// only on a specific arm (for example resetting the flag on the ctor default
+        /// arm) would slip past the single existing test.
+        /// </summary>
+        [TestCase(DeviceValidationLevel.Ignore)]
+        [TestCase(DeviceValidationLevel.Warning)]
+        [TestCase(DeviceValidationLevel.Remove)]
+        [TestCase(DeviceValidationLevel.Strict)]
+        public void Normalize_Sticky_Suppression_Holds_For_Every_Explicit_Arm(DeviceValidationLevel explicitArm)
+        {
+            var config = new AgentConfiguration();
+            // Pick an IVL arm that is DIFFERENT from the explicit DVL arm so the mirror
+            // path would corrupt DVL if the latch failed. Both enums share ordinals so
+            // the cast is meaningful.
+            config.InputValidationLevel = explicitArm == DeviceValidationLevel.Strict
+                ? InputValidationLevel.Ignore
+                : InputValidationLevel.Strict;
+            config.DeviceValidationLevel = explicitArm;
+
+            config.Normalize();
+
+            Assert.That(config.DeviceValidationLevel, Is.EqualTo(explicitArm),
+                $"the explicit-DVL latch must stick for arm {explicitArm} regardless of the divergent IVL value.");
+        }
+
+        // ---------------------------------------------------------------
+        // YAML load path — parallel to ReadJson mirror
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Pins the YAML load path invokes <see cref="AgentConfiguration.Normalize"/> —
+        /// the docstring on <c>Normalize</c> lists <c>ReadYaml</c> as an invocation site
+        /// (AgentConfiguration.cs:240) but the existing fixture only exercises the JSON
+        /// path. A regression that dropped the <c>configuration.Normalize()</c> call from
+        /// <c>ReadYaml</c> (AgentConfiguration.cs:439) would silently downgrade YAML-loading
+        /// consumers to the ctor-default DeviceValidationLevel on every arm change of
+        /// InputValidationLevel — a diagnostic-silent behaviour break.
+        /// </summary>
+        [Test]
+        public void ReadYaml_InputValidationLevel_Only_Mirrors_Onto_DeviceValidationLevel()
+        {
+            var path = WriteTempYaml("inputValidationLevel: 3\n");
+            try
+            {
+                var config = AgentConfiguration.ReadYaml(path);
+
+                Assert.That(config, Is.Not.Null, "the YAML loader must not have swallowed the config.");
+                Assert.That(config!.InputValidationLevel, Is.EqualTo(InputValidationLevel.Strict));
+                Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Strict),
+                    "the YAML load path must invoke Normalize so pre-split consumers keep the mirrored DeviceValidationLevel.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>Pins that YAML explicit <c>deviceValidationLevel</c> beats the mirror — sister of the JSON test.</summary>
+        [Test]
+        public void ReadYaml_Explicit_DeviceValidationLevel_Beats_Mirror()
+        {
+            var path = WriteTempYaml(
+                "inputValidationLevel: 3\ndeviceValidationLevel: 0\n");
+            try
+            {
+                var config = AgentConfiguration.ReadYaml(path);
+
+                Assert.That(config, Is.Not.Null);
+                Assert.That(config!.InputValidationLevel, Is.EqualTo(InputValidationLevel.Strict));
+                Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Ignore),
+                    "an explicit deviceValidationLevel key in YAML must NOT be silently overwritten by the mirror.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         // ---------------------------------------------------------------
         // Fixture harness
         // ---------------------------------------------------------------
@@ -194,6 +448,13 @@ namespace MTConnect.Tests.Common.Configurations
         {
             var path = Path.Combine(Path.GetTempPath(), $"agent-config-{Guid.NewGuid():N}.json");
             File.WriteAllText(path, json);
+            return path;
+        }
+
+        private static string WriteTempYaml(string yaml)
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"agent-config-{Guid.NewGuid():N}.yaml");
+            File.WriteAllText(path, yaml);
             return path;
         }
     }

@@ -216,5 +216,177 @@ namespace MTConnect.NET_Common_Tests.Devices
             Assert.DoesNotThrow(() => device.RemoveDataItem("nothing"),
                 "RemoveDataItem must exit safely when the Device has neither DataItems nor Components.");
         }
+
+        // --------------------------------------------------------------
+        // Sibling isolation — the recursive RemoveAll(o => o.Id == id)
+        // predicate must only match the requested ID and leave every
+        // sibling untouched. A regression to a permissive predicate
+        // (for example RemoveAll(o => true) inside a wrong overload)
+        // would strip every sibling and would pass the single-child
+        // tests above; the sibling-isolation shape catches that class.
+        // --------------------------------------------------------------
+
+        /// <summary>
+        /// Pins that <see cref="Device.RemoveComposition"/> called against
+        /// one of two siblings on the top-level <c>Device.Compositions</c>
+        /// collection drops only the requested Composition and leaves the
+        /// sibling intact.
+        /// </summary>
+        [Test]
+        public void RemoveComposition_top_level_leaves_sibling_Compositions_intact()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            device.AddComposition(new Composition { Id = "drop-me", Name = "drop-me", Type = "Generic" });
+            device.AddComposition(new Composition { Id = "keep-me", Name = "keep-me", Type = "Generic" });
+
+            device.RemoveComposition("drop-me");
+
+            Assert.That(device.Compositions.Any(c => c.Id == "drop-me"), Is.False,
+                "RemoveComposition must drop the requested top-level Composition.");
+            Assert.That(device.Compositions.Any(c => c.Id == "keep-me"), Is.True,
+                "RemoveComposition must not drop siblings of the requested Composition — the RemoveAll predicate is ID-scoped.");
+        }
+
+        /// <summary>
+        /// Pins the same sibling-isolation invariant on the recursive
+        /// nested branch: two Compositions attached to a child Component,
+        /// only one requested for removal.
+        /// </summary>
+        [Test]
+        public void RemoveComposition_nested_leaves_sibling_Compositions_intact()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            var host = new Component { Id = "host", Name = "host", Type = "Axes" };
+            host.AddComposition(new Composition { Id = "drop-nested", Name = "drop-nested", Type = "Generic" });
+            host.AddComposition(new Composition { Id = "keep-nested", Name = "keep-nested", Type = "Generic" });
+            device.AddComponent(host);
+
+            device.RemoveComposition("drop-nested");
+
+            Assert.That(device.GetCompositions().Any(c => c.Id == "drop-nested"), Is.False);
+            Assert.That(device.GetCompositions().Any(c => c.Id == "keep-nested"), Is.True,
+                "the nested recursion must not drop siblings.");
+        }
+
+        /// <summary>
+        /// Pins that a Composition with the same ID present at BOTH the
+        /// top-level Device.Compositions AND on a nested child Component
+        /// is dropped from both locations — RemoveComposition is depth-
+        /// unlimited, not first-match. This pins the recursion contract
+        /// against a regression that returns on the first match.
+        /// </summary>
+        [Test]
+        public void RemoveComposition_removes_id_from_every_depth_it_appears()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            device.AddComposition(new Composition { Id = "dup-id", Name = "dup-id-top", Type = "Generic" });
+            var host = new Component { Id = "host", Name = "host", Type = "Axes" };
+            host.AddComposition(new Composition { Id = "dup-id", Name = "dup-id-nested", Type = "Generic" });
+            device.AddComponent(host);
+
+            Assert.That(device.GetCompositions().Count(c => c.Id == "dup-id"), Is.EqualTo(2),
+                "precondition — the same ID must be present at both depths.");
+
+            device.RemoveComposition("dup-id");
+
+            var remaining = device.GetCompositions();
+            Assert.That(remaining == null || !remaining.Any(c => c.Id == "dup-id"), Is.True,
+                "RemoveComposition must remove EVERY occurrence of the ID — top-level AND nested — not just the first match.");
+        }
+
+        /// <summary>
+        /// Pins that <see cref="Device.RemoveDataItem"/> called against one of
+        /// two siblings on the top-level <c>Device.DataItems</c> collection
+        /// drops only the requested DataItem and leaves the sibling intact.
+        /// </summary>
+        [Test]
+        public void RemoveDataItem_top_level_leaves_sibling_DataItems_intact()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            device.AddDataItem(new DataItem { Id = "drop-me", Type = "Generic", Category = DataItemCategory.EVENT });
+            device.AddDataItem(new DataItem { Id = "keep-me", Type = "Generic", Category = DataItemCategory.EVENT });
+
+            device.RemoveDataItem("drop-me");
+
+            Assert.That(device.DataItems.Any(d => d.Id == "drop-me"), Is.False,
+                "RemoveDataItem must drop the requested top-level DataItem.");
+            Assert.That(device.DataItems.Any(d => d.Id == "keep-me"), Is.True,
+                "RemoveDataItem must not drop siblings of the requested DataItem.");
+        }
+
+        /// <summary>
+        /// Pins the same sibling-isolation invariant for the nested branch:
+        /// two DataItems attached to a child Component, only one requested
+        /// for removal.
+        /// </summary>
+        [Test]
+        public void RemoveDataItem_nested_leaves_sibling_DataItems_intact()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            var host = new Component { Id = "host", Name = "host", Type = "Axes" };
+            host.AddDataItem(new DataItem { Id = "drop-nested", Type = "Generic", Category = DataItemCategory.EVENT });
+            host.AddDataItem(new DataItem { Id = "keep-nested", Type = "Generic", Category = DataItemCategory.EVENT });
+            device.AddComponent(host);
+
+            device.RemoveDataItem("drop-nested");
+
+            Assert.That(device.GetDataItems().Any(d => d.Id == "drop-nested"), Is.False);
+            Assert.That(device.GetDataItems().Any(d => d.Id == "keep-nested"), Is.True,
+                "nested-branch removal must not drop siblings.");
+        }
+
+        /// <summary>
+        /// Pins that a DataItem ID present at BOTH the top-level
+        /// Device.DataItems AND on a nested child Component is dropped
+        /// from both locations — RemoveDataItem visits every depth,
+        /// not just the first match.
+        /// </summary>
+        [Test]
+        public void RemoveDataItem_removes_id_from_every_depth_it_appears()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            device.AddDataItem(new DataItem { Id = "dup-id", Type = "Generic", Category = DataItemCategory.EVENT });
+            var host = new Component { Id = "host", Name = "host", Type = "Axes" };
+            host.AddDataItem(new DataItem { Id = "dup-id", Type = "Generic", Category = DataItemCategory.EVENT });
+            device.AddComponent(host);
+
+            Assert.That(device.GetDataItems().Count(d => d.Id == "dup-id"), Is.EqualTo(2),
+                "precondition — the same ID must be present at both depths.");
+
+            device.RemoveDataItem("dup-id");
+
+            var remaining = device.GetDataItems();
+            Assert.That(remaining == null || !remaining.Any(d => d.Id == "dup-id"), Is.True,
+                "RemoveDataItem must remove EVERY occurrence of the ID — top-level AND nested.");
+        }
+
+        /// <summary>
+        /// Pins the intermediate depth-2 Composition-removal branch that
+        /// sits BETWEEN the top-level (depth-1) and great-grandchild
+        /// (depth-3) coverage above: Device → Component → Composition
+        /// directly on the child Component. This is the shape the
+        /// original NormalizeDevice-Remove path used before the recursive
+        /// fix; a regression to a two-level walk would still pass the
+        /// depth-1 top-level test and might pass the depth-3 test via a
+        /// different code path — the depth-2 test pins the exact single
+        /// level of recursion.
+        /// </summary>
+        [Test]
+        public void RemoveComposition_removes_depth_2_Composition_on_direct_child_Component()
+        {
+            var device = new Device { Id = "d1", Uuid = "d1", Name = "d1", Type = Device.TypeId };
+            var child = new Component { Id = "child", Name = "child", Type = "Axes" };
+            child.AddComposition(new Composition { Id = "mid-comp", Name = "mid-comp", Type = "Generic" });
+            device.AddComponent(child);
+
+            Assert.That(device.GetCompositions().Any(c => c.Id == "mid-comp"), Is.True,
+                "precondition — the depth-2 Composition must be reachable via GetCompositions.");
+
+            device.RemoveComposition("mid-comp");
+
+            var remaining = device.GetCompositions();
+            Assert.That(remaining == null || !remaining.Any(c => c.Id == "mid-comp"), Is.True,
+                "RemoveComposition must reach depth-2 Compositions attached to a direct child Component.");
+        }
     }
 }
