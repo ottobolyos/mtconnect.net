@@ -28,16 +28,16 @@ namespace MTConnect.NET_Generator_Tests
     ///     with the generator.</item>
     ///   <item><see cref="Current_XMI_regen_matches_committed_g_cs_tree"/> —
     ///     the strict baseline guard. Diffs a fresh regen against the
-    ///     committed tree. Marked <c>[Explicit]</c> because a Phase 3.1
-    ///     dry-run on 2026-08-20 revealed pre-existing drift: 15 files
-    ///     committed under <c>libraries/</c> that the current generator
-    ///     no longer emits, plus 63 files whose committed content differs
-    ///     from the current-XMI regen output. Un-marking this test to
-    ///     <c>[Test]</c> follows once a companion &quot;refresh
-    ///     <c>.g.cs</c>&quot; commit lands the current-XMI regen output
-    ///     into <c>libraries/</c> and the 15 unemitted files have been
-    ///     triaged (deleted as generator-orphaned, or moved to
-    ///     hand-authored <c>.cs</c>).</item>
+    ///     committed tree and fails on any drift. The Phase 3.1 dry-run
+    ///     on 2026-08-20 surfaced a 78-file drift (15 committed
+    ///     <c>.g.cs</c> files the generator no longer emits + 63 files
+    ///     with content drift); Phase 4.1 resolved every case in the
+    ///     preceding commit train (10 missing Pallet measurement
+    ///     interfaces routed through a new template + <c>MeasurementModel
+    ///     .RenderInterface()</c> wire-up, 5 orphaned <c>.g.cs</c> files
+    ///     deleted after a codebase-wide grep confirmed zero consumers,
+    ///     63 whitespace-drift files refreshed to current-generator
+    ///     output). The guard now runs on every CI test sweep.</item>
     /// </list>
     ///
     /// Scope decision (ottobolyos 2026-08-20): current-XMI only. The
@@ -85,12 +85,7 @@ namespace MTConnect.NET_Generator_Tests
                 diff);
         }
 
-        [Test, Explicit(
-            "Phase 3.1 dry-run (2026-08-20) surfaces pre-existing drift between the " +
-            "current-XMI regen and the committed libraries/**/*.g.cs tree: 15 files " +
-            "committed that the generator no longer emits + 63 files with content drift. " +
-            "Un-mark to [Test] once a refresh .g.cs commit lands and the 15 unemitted " +
-            "files are triaged.")]
+        [Test]
         public void Current_XMI_regen_matches_committed_g_cs_tree()
         {
             var repoRoot = FindRepoRoot();
