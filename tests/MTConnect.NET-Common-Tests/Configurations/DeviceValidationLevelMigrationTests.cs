@@ -924,6 +924,141 @@ namespace MTConnect.Tests.Common.Configurations
         }
 
         // ---------------------------------------------------------------
+        // F-SEC-002 — MapInputToDeviceValidationLevel exhaustive switch,
+        // default-arm throw on unmapped ordinal
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Pins the default arm of the <c>MapInputToDeviceValidationLevel</c>
+        /// switch expression that cycle-3 F-SEC-002 introduced. The four mapped
+        /// arms (Ignore / Warning / Remove / Strict) are exercised indirectly by
+        /// <c>Normalize_Mirrors_Every_InputValidationLevel_Arm</c> above — but
+        /// the default arm, whose entire raison d'être is to fail loudly rather
+        /// than silently coerce to <c>default(DeviceValidationLevel)</c>, has
+        /// no test on the mapped-arm side. A regression that swapped
+        /// <c>_ =&gt; throw new InvalidOperationException(...)</c> for
+        /// <c>_ =&gt; default(DeviceValidationLevel)</c> — the exact footgun the
+        /// refactor eliminated — would silently pass every existing test and
+        /// re-introduce the runtime coercion the switch was written to prevent.
+        ///
+        /// The public setter <c>InputValidationLevel = ...</c> now guards via
+        /// <c>ThrowIfUndefined</c>, so the default arm cannot be reached
+        /// through the normal API surface — the private backing field must be
+        /// poked. Reflection-invoking the private static helper directly with
+        /// an unmapped ordinal is the minimal, precise pin.
+        /// </summary>
+        [Test]
+        public void MapInputToDeviceValidationLevel_Default_Arm_Throws_InvalidOperationException_On_Unmapped_Ordinal()
+        {
+            var method = typeof(AgentConfiguration).GetMethod(
+                "MapInputToDeviceValidationLevel",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null,
+                "MapInputToDeviceValidationLevel must exist as a static non-public helper on AgentConfiguration — the F-SEC-002 refactor contract.");
+
+            var unmapped = (InputValidationLevel)99;
+            var ex = Assert.Throws<TargetInvocationException>(
+                () => method!.Invoke(null, new object[] { unmapped }));
+            Assert.That(ex!.InnerException, Is.InstanceOf<InvalidOperationException>(),
+                "the default arm of the switch expression must throw InvalidOperationException — dime F-SEC-002 hard-fail contract; a regression to `_ => default(DeviceValidationLevel)` would silently coerce unmapped ordinals to Ignore, re-introducing the exact static-alias footgun the exhaustive switch eliminated.");
+            Assert.That(ex.InnerException!.Message, Does.Contain("Unmapped InputValidationLevel"),
+                "the InvalidOperationException message must name the enum type so the operator sees which mirror-mapping table is stale.");
+            Assert.That(ex.InnerException.Message, Does.Contain("99"),
+                "the InvalidOperationException message must carry the offending ordinal so a shipped mismatch can be diagnosed from the trace alone.");
+        }
+
+        /// <summary>
+        /// Pins that each of the four <see cref="InputValidationLevel"/> arms
+        /// maps to its ordinal-matching <see cref="DeviceValidationLevel"/> arm
+        /// through the F-SEC-002 helper directly (not just transitively via
+        /// <c>Normalize</c>). A regression that transposed two arms in the
+        /// switch expression — e.g. mapped <c>InputValidationLevel.Remove</c>
+        /// to <c>DeviceValidationLevel.Warning</c> — would leave the transitive
+        /// tests passing when the enum ordinals happened to align on the
+        /// permuted arms; the direct pin fails on the transposition.
+        /// </summary>
+        [TestCase(InputValidationLevel.Ignore, DeviceValidationLevel.Ignore)]
+        [TestCase(InputValidationLevel.Warning, DeviceValidationLevel.Warning)]
+        [TestCase(InputValidationLevel.Remove, DeviceValidationLevel.Remove)]
+        [TestCase(InputValidationLevel.Strict, DeviceValidationLevel.Strict)]
+        public void MapInputToDeviceValidationLevel_Every_Mapped_Arm_Returns_Ordinal_Mirror(
+            InputValidationLevel input, DeviceValidationLevel expected)
+        {
+            var method = typeof(AgentConfiguration).GetMethod(
+                "MapInputToDeviceValidationLevel",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null,
+                "MapInputToDeviceValidationLevel must exist as a static non-public helper on AgentConfiguration — the F-SEC-002 refactor contract.");
+
+            var result = (DeviceValidationLevel)method!.Invoke(null, new object[] { input })!;
+            Assert.That(result, Is.EqualTo(expected),
+                $"MapInputToDeviceValidationLevel({input}) must return {expected} — dime F-SEC-002 explicit-switch mapping contract; a transposed arm would flip the DVL mirror silently.");
+        }
+
+        // ---------------------------------------------------------------
+        // F-SIMP-C3-001 — LoadWithTriage stamps configuration.Path on the
+        // returned instance (hoisted from the four loader closures)
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Pins that <see cref="AgentConfiguration.ReadJson(string)"/> stamps the
+        /// loaded configuration's <see cref="AgentConfiguration.Path"/> property
+        /// with the file the config was loaded from. The M2-C2 refactor extracted
+        /// the triage wrapper and cycle-3 F-SIMP-C3-001 hoisted the
+        /// <c>configuration.Path = configurationPath</c> assignment INTO the
+        /// helper (out of the four closures). A regression that dropped the
+        /// hoisted assignment would leave <c>Path</c> null after every load,
+        /// silently breaking downstream file-relative resolutions (the Path
+        /// property's docstring names it "the default target when the
+        /// configuration is saved") — a diagnostic-silent behaviour break.
+        /// </summary>
+        [Test]
+        public void ReadJson_Stamps_Configuration_Path_On_Loaded_Instance()
+        {
+            var path = WriteTempJson("{\"inputValidationLevel\":1}");
+            try
+            {
+                var config = AgentConfiguration.ReadJson(path);
+
+                Assert.That(config, Is.Not.Null,
+                    "precondition — the loader must not have swallowed a valid config.");
+                Assert.That(config!.Path, Is.EqualTo(path),
+                    "ReadJson must stamp AgentConfiguration.Path with the file the config was loaded from — dime F-SIMP-C3-001 hoisted-stamp contract; a regression that dropped `configuration.Path = configurationPath` from LoadWithTriage would silently leave downstream save/relative-resolve paths null.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        /// Sibling of the JSON test — <see cref="AgentConfiguration.ReadYaml(string)"/>
+        /// must also stamp <see cref="AgentConfiguration.Path"/>. The four loader
+        /// entrypoints share <c>LoadWithTriage</c>, so a regression that dropped
+        /// the hoisted stamp would fail on every loader in parallel; pinning both
+        /// JSON and YAML surfaces catches an unlikely path-specific regression
+        /// (e.g. a partial revert that only touched the YAML closure).
+        /// </summary>
+        [Test]
+        public void ReadYaml_Stamps_Configuration_Path_On_Loaded_Instance()
+        {
+            var path = WriteTempYaml("inputValidationLevel: 1\n");
+            try
+            {
+                var config = AgentConfiguration.ReadYaml(path);
+
+                Assert.That(config, Is.Not.Null,
+                    "precondition — the loader must not have swallowed a valid config.");
+                Assert.That(config!.Path, Is.EqualTo(path),
+                    "ReadYaml must stamp AgentConfiguration.Path with the file the config was loaded from — dime F-SIMP-C3-001 hoisted-stamp contract; sibling of the JSON pin.");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // ---------------------------------------------------------------
         // Trace-listener capture harness
         // ---------------------------------------------------------------
 

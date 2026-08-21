@@ -766,6 +766,9 @@ namespace MTConnect.NET_Common_Tests.Devices
                 Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveComposition") && w.Contains("walk depth 1024 exceeded")),
                     Is.True,
                     "the depth-cap-hit path must emit a Trace.TraceWarning naming Device.RemoveComposition and the exceeded ceiling — dime L3-C2 diagnostic contract.");
+                Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveComposition[d1]")),
+                    Is.True,
+                    "the depth-cap-hit trace warning must interpolate the device Id in [Id] brackets between the method name and the message body — dime F-IMP-C3-001 fleet-bisection contract; a regression that dropped the [d1] tag would silently revert the operator-diagnostic improvement.");
             }
             finally
             {
@@ -798,6 +801,9 @@ namespace MTConnect.NET_Common_Tests.Devices
                 Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveDataItem") && w.Contains("walk depth 1024 exceeded")),
                     Is.True,
                     "the depth-cap-hit path must emit a Trace.TraceWarning naming Device.RemoveDataItem and the exceeded ceiling — dime L3-C2 diagnostic contract.");
+                Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveDataItem[d1]")),
+                    Is.True,
+                    "the depth-cap-hit trace warning must interpolate the device Id in [Id] brackets between the method name and the message body — dime F-IMP-C3-001 fleet-bisection contract; a regression that dropped the [d1] tag would silently revert the operator-diagnostic improvement.");
             }
             finally
             {
@@ -834,6 +840,9 @@ namespace MTConnect.NET_Common_Tests.Devices
                 Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveComponent") && w.Contains("walk depth 1024 exceeded")),
                     Is.True,
                     "the depth-cap-hit path must emit a Trace.TraceWarning naming Device.RemoveComponent and the exceeded ceiling — dime L3-C2 diagnostic contract extended to the H1-C2 addition.");
+                Assert.That(listener.Warnings.Any(w => w.Contains("Device.RemoveComponent[d1]")),
+                    Is.True,
+                    "the depth-cap-hit trace warning must interpolate the device Id in [Id] brackets between the method name and the message body — dime F-IMP-C3-001 fleet-bisection contract; a regression that dropped the [d1] tag would silently revert the operator-diagnostic improvement.");
             }
             finally
             {
