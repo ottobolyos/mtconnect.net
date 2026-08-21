@@ -380,9 +380,11 @@ namespace MTConnect.NET_JSON_Tests.Regressions
         /// <summary>
         /// Warm-up-before-freeze ordering pin (net8+): the frozen singleton
         /// must still be able to serialize a real typed payload, proving that
-        /// the static-ctor warm-up (<c>JsonSerializer.Serialize&lt;object&gt;(null, _defaultOptions)</c>)
-        /// ran BEFORE <c>MakeReadOnly(populateMissingResolver: false)</c>. If a
-        /// future refactor reordered the two calls — or removed the warm-up
+        /// the static-ctor warm-up (typed <c>JsonSerializer.Serialize</c>
+        /// calls against each MTConnect top-level response surrogate — see
+        /// <c>JsonFunctions.WarmReachableGraph</c>) ran BEFORE
+        /// <c>MakeReadOnly(populateMissingResolver: false)</c>. If a future
+        /// refactor reordered the two calls — or removed the warm-up
         /// entirely — the frozen, resolver-less options would throw
         /// <see cref="System.NotSupportedException"/> on the first real-payload
         /// Serialize. The invariant is documented in the JsonFunctions static
@@ -404,7 +406,7 @@ namespace MTConnect.NET_JSON_Tests.Regressions
             string indented = string.Empty;
             Assert.DoesNotThrow(
                 () => compact = JsonSerializer.Serialize(payload, JsonFunctions.DefaultOptions),
-                "Frozen DefaultOptions must have a populated TypeInfoResolver — a static-ctor reorder that runs MakeReadOnly BEFORE the Serialize<object>(null, …) warm-up would surface here as NotSupportedException.");
+                "Frozen DefaultOptions must have a populated TypeInfoResolver — a static-ctor reorder that runs MakeReadOnly BEFORE the WarmReachableGraph typed-Serialize calls would surface here as NotSupportedException.");
             Assert.DoesNotThrow(
                 () => indented = JsonSerializer.Serialize(payload, JsonFunctions.IndentOptions),
                 "Frozen IndentOptions must have a populated TypeInfoResolver — same warm-up-before-freeze invariant as DefaultOptions.");

@@ -39,15 +39,25 @@ namespace MTConnect
         {
 #if NET8_0_OR_GREATER
             // Warm the default reflection resolver + serialization
-            // metadata cache at assembly load rather than on the first
-            // production /current or /sample request. Serializing a
-            // typed null pays the resolver bootstrap cost + fixes the
-            // options' internal state, so the first user-facing
-            // Serialize call skips that setup entirely. This matters
-            // more for the cppagent assembly than for the plain-JSON
-            // one — it ships 25 Streams.Json classes vs 10, so the
-            // reflection cost per fresh options is proportionally
-            // larger.
+            // metadata cache at assembly load rather than on the
+            // first production /current | /sample | /assets request.
+            // Serializing a real instance of each cppagent top-level
+            // response surrogate forces STJ to walk that type's
+            // reachable property graph, which is where the
+            // LCG DynamicMethod property accessors are emitted; paying
+            // that cost once at assembly load is the whole point of
+            // the warm-up. This matters more for the cppagent assembly
+            // than for the plain-JSON one — it ships 25 Streams.Json
+            // classes vs 10, so the reflection cost per fresh options
+            // is proportionally larger.
+            //
+            // A prior warm-up form (Serialize<object>(null, options))
+            // only bootstrapped the shared reflection resolver — it
+            // never named a concrete MTConnect type, so the cold LCG
+            // emit for JsonStreamsResponseDocument /
+            // JsonAssetsResponseDocument / JsonDevicesResponseDocument
+            // still fell on the first user-facing request. The typed
+            // calls below fix that.
             //
             // Order matters: the warm-up must run BEFORE MakeReadOnly,
             // because MakeReadOnly(populateMissingResolver: false)
@@ -57,8 +67,8 @@ namespace MTConnect
             // Serialize first lets STJ auto-populate the resolver via
             // its normal lazy path, after which MakeReadOnly(false)
             // is a pure lock with no side effect on serialization.
-            JsonSerializer.Serialize<object>(null, _defaultOptions);
-            JsonSerializer.Serialize<object>(null, _indentOptions);
+            WarmReachableGraph(_defaultOptions);
+            WarmReachableGraph(_indentOptions);
 
             // Freeze both singletons so callers cannot mutate the
             // shared instance (adding a Converter, flipping
@@ -71,6 +81,25 @@ namespace MTConnect
             _indentOptions.MakeReadOnly(populateMissingResolver: false);
 #endif
         }
+
+#if NET8_0_OR_GREATER
+        // Serialize an instance of each cppagent top-level response
+        // surrogate against <paramref name="options"/>, so STJ
+        // configures JsonTypeInfo (and emits the LCG DynamicMethod
+        // property accessors) for the reachable graph rooted at each
+        // type. Called from the static constructor for both the
+        // compact and indented option singletons.
+        //
+        // All three cppagent response envelopes expose public
+        // parameterless constructors for JSON deserialization, so the
+        // warm-up just news each one up and hands it to Serialize.
+        private static void WarmReachableGraph(JsonSerializerOptions options)
+        {
+            JsonSerializer.Serialize(new Streams.Json.JsonStreamsResponseDocument(), options);
+            JsonSerializer.Serialize(new Assets.Json.JsonAssetsResponseDocument(), options);
+            JsonSerializer.Serialize(new Devices.Json.JsonDevicesResponseDocument(), options);
+        }
+#endif
 
         /// <summary>
         /// Builds a fresh <see cref="JsonSerializerOptions"/> instance
