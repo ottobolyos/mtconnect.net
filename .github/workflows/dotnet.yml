@@ -543,12 +543,24 @@ jobs:
       # the GitHub-default for bash steps. This step only runs on
       # failure, by design — when the pack is green, the produced
       # nupkgs are not inspected further.
+      #
+      # The regex matches any MSBuild-shaped diagnostic —
+      # `error XX0000` / `warning XX0000` where XX is one or more
+      # capital letters (CS, CA, NU, SYSLIB, MSB, NETSDK, IL, XA,
+      # xUnit, NUnit, StyleCop, Roslyn analyzers, MTC-authored
+      # codes, third-party analyzer codes, ...). The prior
+      # `(CS|CA|NU|SYSLIB|MSB)` enumeration silently dropped every
+      # analyzer family outside that set — e.g. IL, NETSDK, NUnit
+      # analyzers, StyleCop, third-party CVE checkers — and produced
+      # empty summaries when the pack failed on any of them. The
+      # broadened pattern matches every MSBuild diagnostic shape so
+      # no failure family is masked.
       - name: Surface pack errors (if any)
         if: failure()
         run: |
           echo "### Release-pack diagnostics" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -E '(error|warning) (CS|CA|NU|SYSLIB|MSB)' pack.log \
+          grep -E '\b(error|warning)[[:space:]]+[A-Z]+[0-9]+' pack.log \
             | sort -u | head -100 >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
         shell: bash
