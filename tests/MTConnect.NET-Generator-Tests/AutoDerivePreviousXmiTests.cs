@@ -233,6 +233,169 @@ namespace MTConnect
         }
 
         [Test]
+        public void Missing_MTConnectVersions_cs_fails_with_actionable_message()
+        {
+            // ReadMTConnectVersionsMax throws FileNotFoundException when the
+            // versions file is absent under --output. The top-level try/catch
+            // in Program.cs (lines 172-182) maps that to stderr `error: ...`
+            // + exit 1. Pin the actionable message the operator sees so a
+            // later refactor of the error text still names all four
+            // recovery paths (probed file path, --previous-xmi override,
+            // --full-tree escape hatch, expected file location).
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("versions-cs-missing");
+            // Deliberately do NOT write MTConnectVersions.cs — the guard
+            // must fire before the resolver reaches Strategy A/B/C.
+
+            var (exitCode, _, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.EqualTo(1),
+                $"Missing MTConnectVersions.cs must exit 1 via the top-level catch, not stack-trace.\nstderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("MTConnectVersions.cs not found"),
+                "stderr must name the missing file so the operator can locate it.");
+            Assert.That(stderr, Does.Contain("--previous-xmi"),
+                "stderr must direct the operator to the explicit-override flag.");
+            Assert.That(stderr, Does.Contain("--full-tree"),
+                "stderr must direct the operator to the delta-disable escape hatch.");
+        }
+
+        [Test]
+        public void MTConnectVersions_cs_without_Max_declaration_fails_hard()
+        {
+            // The Max regex miss surfaces as InvalidOperationException →
+            // top-level catch → exit 1 with a message that pinpoints the
+            // convention the parser expects. Write a syntactically-valid
+            // C# file that carries no `public static Version Max => ...`
+            // property so the regex miss fires; the parser must reject
+            // rather than silently no-op or default to a wrong version.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("versions-cs-no-max");
+            var targetPath = Path.Combine(
+                scratch, "libraries", "MTConnect.NET-Common", "MTConnectVersions.cs");
+            File.WriteAllText(targetPath, @"// Missing Max property; the parser must reject this file.
+using System;
+namespace MTConnect
+{
+    public static class MTConnectVersions
+    {
+        public static readonly Version Version27 = new Version(2, 7);
+    }
+}
+");
+
+            var (exitCode, _, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.EqualTo(1),
+                $"Missing Max property must exit 1 via the top-level catch.\nstderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("Could not locate"),
+                "stderr must announce a parse-shape failure, not a resolver failure.");
+            Assert.That(stderr, Does.Contain("Max"),
+                "stderr must name the missing convention element so the operator knows what to restore.");
+            Assert.That(stderr, Does.Contain("--previous-xmi"),
+                "stderr must direct the operator to the explicit-override flag.");
+        }
+
+        [Test]
+        public void MTConnectVersions_cs_without_const_table_entry_fails_hard()
+        {
+            // The Max property resolves to a VersionXY constant that must
+            // exist in the file's const table. If Max => VersionNN but no
+            // `public static readonly Version VersionNN = new Version(...)`,
+            // the resolver throws InvalidOperationException. This exercises
+            // the second `if (!constMatch.Success)` branch, distinct from
+            // the Max-regex-miss branch above.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("versions-cs-no-const");
+            var targetPath = Path.Combine(
+                scratch, "libraries", "MTConnect.NET-Common", "MTConnectVersions.cs");
+            File.WriteAllText(targetPath, @"// Max points at Version99 which is not declared.
+using System;
+namespace MTConnect
+{
+    public static class MTConnectVersions
+    {
+        public static Version Max => Version99;
+        public static readonly Version Version27 = new Version(2, 7);
+    }
+}
+");
+
+            var (exitCode, _, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.EqualTo(1),
+                $"Missing const-table entry must exit 1 via the top-level catch.\nstderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("Version99"),
+                "stderr must name the un-resolvable constant so the operator can add it.");
+            Assert.That(stderr, Does.Contain("Could not locate"),
+                "stderr must carry the parse-shape failure fingerprint.");
+        }
+
+        [Test]
+        public void Submodule_dir_without_git_repo_falls_through_to_fail_hard()
+        {
+            // Strategy A gates on TryGetSubmoduleTag returning a matching
+            // tag. When the submodule dir exists and holds an XMI but is
+            // NOT a git repository, `git describe` fails and
+            // TryGetSubmoduleTag returns null — Strategy A rejects, and
+            // Strategy C fires. Distinct from the "no submodule dir at all"
+            // path already covered by the fail-hard fixture.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("submodule-not-git");
+            WriteSyntheticVersionsCs(scratch);
+
+            var submoduleDir = Path.Combine(scratch, "build", "sysml-model");
+            Directory.CreateDirectory(submoduleDir);
+            File.Copy(realXmi, Path.Combine(submoduleDir, "MTConnectSysMLModel.xml"));
+            // NO git init — TryGetSubmoduleTag must return null.
+
+            var (exitCode, _, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.EqualTo(1),
+                $"A non-git submodule dir must fall through to Strategy C, not Strategy A.\nstderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("PREV_VERSION auto-derivation"),
+                "stderr must announce the Strategy-C fail-hard, not accept the un-tagged tree.");
+            Assert.That(stderr, Does.Contain("v2.7"),
+                "stderr must state the expected submodule tag so the operator sees which tag was required.");
+        }
+
+        [Test]
+        public void Submodule_git_repo_with_wrong_tag_falls_through_to_fail_hard()
+        {
+            // Strategy A accepts only an EXACT-match tag. A git repo tagged
+            // v9.9 (not v2.7 = MTConnectVersions.Max) must reject and fall
+            // through to Strategy C. This exercises the branch where
+            // TryGetSubmoduleTag returns a non-null string that fails the
+            // Ordinal comparison against expectedTag.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("submodule-wrong-tag");
+            WriteSyntheticVersionsCs(scratch);
+
+            var submoduleDir = Path.Combine(scratch, "build", "sysml-model");
+            Directory.CreateDirectory(submoduleDir);
+            File.Copy(realXmi, Path.Combine(submoduleDir, "MTConnectSysMLModel.xml"));
+            InitGitRepoWithTag(submoduleDir, "v9.9");
+
+            var (exitCode, _, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.EqualTo(1),
+                $"A wrong-tagged submodule must fall through to Strategy C.\nstderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("PREV_VERSION auto-derivation"),
+                "stderr must announce the Strategy-C fail-hard, not silently accept the wrong tag.");
+            Assert.That(stderr, Does.Contain("v2.7"),
+                "stderr must state the expected tag (v2.7) so the operator sees the mismatch.");
+        }
+
+        [Test]
         public void Full_tree_flag_disables_delta_mode()
         {
             var repoRoot = FindRepoRoot();
@@ -269,15 +432,21 @@ namespace MTConnect
                 + "Unexpected Compat files:\n  " + string.Join("\n  ", compatFiles));
 
             // Full-tree emits the whole tree — at least the current-XMI
-            // baseline count of files. A cheap sanity check on the emission
-            // shape without pinning the exact count (which drifts with each
-            // spec bump).
+            // baseline count of files. The committed tree ships ~892 .g.cs
+            // files at v2.7 landing (2026-08-20); pin a floor of 700 so
+            // ordinary spec-shrink drift (a version dropping ~15 types) is
+            // tolerated but a delta-mode leakage (which would emit only the
+            // ~10-file diff, not the full tree) trips the guard loudly.
+            // A previous `>100` threshold accepted any partial emission
+            // including the delta subset.
             var emittedFiles = Directory
                 .EnumerateFiles(scratch, "*.g.cs", SearchOption.AllDirectories)
                 .Count();
-            Assert.That(emittedFiles, Is.GreaterThan(100),
+            Assert.That(emittedFiles, Is.GreaterThan(700),
                 "--full-tree must emit the whole generated tree, not the delta subset. "
-                + $"Actual .g.cs count: {emittedFiles}.");
+                + $"Actual .g.cs count: {emittedFiles}. A count in the ~10-100 range "
+                + "signals a delta-mode leak; a count under 700 signals substantial spec "
+                + "shrink and should ratchet this floor after human review.");
         }
 
         // --- helpers -----------------------------------------------------

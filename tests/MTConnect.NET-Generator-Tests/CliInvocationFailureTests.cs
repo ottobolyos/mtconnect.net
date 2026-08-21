@@ -180,6 +180,23 @@ namespace MTConnect.NET_Generator_Tests
         }
 
         [Test]
+        public void Missing_value_after_new_xmi_flag_exits_non_zero()
+        {
+            // Task #408 introduced --new-xmi as the preferred spelling. Its
+            // RequireValue arm is a distinct switch case from --xmi; pin the
+            // parallel failure surface so a later refactor can't silently
+            // regress the preferred-flag arm while leaving the legacy alias
+            // exercised.
+            var (exitCode, _, stderr) = Run("--new-xmi");
+            Assert.That(exitCode, Is.Not.Zero,
+                "A --new-xmi with no trailing value is a runtime failure; exit non-zero.");
+            Assert.That(stderr, Does.Contain("--new-xmi"),
+                "stderr should name the offending flag verbatim.");
+            Assert.That(stderr, Does.Contain("requires a value").Or.Contain("ArgumentException"),
+                "stderr should carry the RequireValue-throw fingerprint.");
+        }
+
+        [Test]
         public void Missing_value_after_previous_xmi_flag_exits_non_zero()
         {
             var repoRoot = FindRepoRoot();
@@ -284,6 +301,131 @@ namespace MTConnect.NET_Generator_Tests
                 .Or.Contain("XmlException")
                 .Or.Contain("NullReference"),
                 "The output stream must surface a parse-failure fingerprint the operator can grep for.");
+        }
+
+        // Every hostile / malformed --compat-version-label value that
+        // IsSafeCompatLabel is designed to reject. Each case exercises the
+        // exit-2 guard branch (Program.cs:198-204). The regex accepts
+        // 1..64 chars of [A-Za-z0-9_\-] followed by [A-Za-z0-9_\-.]*, no
+        // leading dot; anything else must reject at argument-parse time.
+        //
+        // The `TestCaseSource` shape (versus inline `[TestCase]`) keeps the
+        // 65-char oversize label programmatically constructed rather than
+        // hard-coded, so a later ratchet of the length limit needs to
+        // change only the source method + the guard.
+        [TestCaseSource(nameof(HostileCompatLabelCases))]
+        public void Hostile_compat_version_label_rejects_with_exit_2(
+            string hostileLabel, string scenario)
+        {
+            var repoRoot = FindRepoRoot();
+            var xmi = Path.Combine(repoRoot, XmiRelativePath);
+            var scratch = InitScratchWithLibraries($"hostile-label-{scenario}");
+
+            // --full-tree short-circuits the auto-derive resolver so the
+            // safety check is exercised in isolation. Without --full-tree
+            // the zero-config resolver would abort first (no
+            // MTConnectVersions.cs under the scratch tree), masking the
+            // IsSafeCompatLabel branch under a different early-return.
+            var (exitCode, _, stderr) = Run(
+                "--xmi", xmi,
+                "--output", scratch,
+                "--compat-version-label", hostileLabel,
+                "--full-tree");
+
+            Assert.That(exitCode, Is.EqualTo(2),
+                $"Hostile --compat-version-label '{hostileLabel}' ({scenario}) must reject with usage-error exit 2. "
+                + $"An exit 0/1 signals the IsSafeCompatLabel guard was bypassed. stderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("--compat-version-label"),
+                "stderr must name the offending flag so the operator sees which value the parser rejected.");
+            Assert.That(stderr, Does.Contain("not a safe filename"),
+                "stderr must carry the guard's rejection fingerprint (`not a safe filename`) "
+                + "so the operator distinguishes label-shape rejection from other exit-2 causes.");
+        }
+
+        // Enumerates the hostile-label surface. Each entry is
+        // (label, scenario-slug); the slug feeds the scratch-dir suffix so
+        // parallel runs don't collide. Every entry must reject via
+        // IsSafeCompatLabel returning false.
+        private static object[] HostileCompatLabelCases()
+        {
+            return new object[]
+            {
+                new object[] { "../etc/passwd", "path-traversal-parent" },
+                new object[] { "Compat/../secret", "path-traversal-inline" },
+                new object[] { "sub/dir", "forward-slash" },
+                new object[] { "sub\\dir", "backslash" },
+                new object[] { ".hidden", "leading-dot" },
+                new object[] { "..", "double-dot" },
+                new object[] { "  ", "whitespace-only" },
+                new object[] { "with space", "internal-space" },
+                new object[] { "label;drop", "semicolon-injection" },
+                new object[] { "label$var", "shell-metachar" },
+                new object[] { "label|pipe", "pipe" },
+                new object[] { "label\ttab", "control-tab" },
+                new object[] { new string('A', 65), "over-length" },
+            };
+        }
+
+        [Test]
+        public void Empty_compat_version_label_rejects_with_exit_2()
+        {
+            // An empty string satisfies the flag-has-a-value check (RequireValue
+            // returns "" rather than throwing) but must fail the safety guard
+            // (IsNullOrWhiteSpace short-circuits IsSafeCompatLabel to false).
+            // This is the boundary case for the length-lower-bound arm.
+            var repoRoot = FindRepoRoot();
+            var xmi = Path.Combine(repoRoot, XmiRelativePath);
+            var scratch = InitScratchWithLibraries("hostile-label-empty");
+            var (exitCode, _, stderr) = Run(
+                "--xmi", xmi,
+                "--output", scratch,
+                "--compat-version-label", "",
+                "--full-tree");
+            Assert.That(exitCode, Is.EqualTo(2),
+                $"An empty --compat-version-label must reject with usage-error exit 2. stderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("not a safe filename"),
+                "stderr must carry the guard's rejection fingerprint.");
+        }
+
+        // Safe-label positive cases — every documented default and every
+        // pattern the auto-derive machinery emits must PASS the guard so a
+        // ratchet of the regex (accidentally tightening it) can't silently
+        // regress the happy path.
+        [TestCase("Previous")]
+        [TestCase("v2_7")]
+        [TestCase("v10_15")]
+        [TestCase("Release-2.6.0")]
+        [TestCase("a")]
+        // 64-char boundary case: 26 upper + 26 lower + 10 digits + `_-` = 64.
+        // Exercises the length-upper-bound `label.Length > 64` arm at its
+        // exact accept-side boundary.
+        [TestCase("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789__")]
+        public void Safe_compat_version_label_accepts_and_reaches_full_tree_branch(string safeLabel)
+        {
+            // Boundary: the last case is exactly 64 chars — the length-upper
+            // bound. IsSafeCompatLabel rejects >64 but must accept ==64.
+            Assert.That(safeLabel.Length, Is.LessThanOrEqualTo(64),
+                "Test setup invariant — safe labels sit inside the length window.");
+
+            var repoRoot = FindRepoRoot();
+            var xmi = Path.Combine(repoRoot, XmiRelativePath);
+            // Sanitise the label for the scratch-dir suffix (the label may
+            // contain '.' which is legal in filenames but collides with the
+            // dir-slug convention). Replace non-alnum with '_'.
+            var scratchSuffix = "safe-label-" + System.Text.RegularExpressions.Regex.Replace(safeLabel, @"[^A-Za-z0-9]", "_");
+            if (scratchSuffix.Length > 96) scratchSuffix = scratchSuffix[..96];
+            var scratch = InitScratchWithLibraries(scratchSuffix);
+
+            var (exitCode, _, stderr) = Run(
+                "--xmi", xmi,
+                "--output", scratch,
+                "--compat-version-label", safeLabel,
+                "--full-tree");
+
+            Assert.That(exitCode, Is.Zero,
+                $"Safe --compat-version-label '{safeLabel}' must not be rejected by the guard. stderr:\n{stderr}");
+            Assert.That(stderr, Does.Not.Contain("not a safe filename"),
+                "stderr must not carry the guard rejection message for a safe label.");
         }
 
         [Test]
