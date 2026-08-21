@@ -322,7 +322,7 @@ namespace MTConnect.NET_JSON_Tests.Regressions
         /// Async-throughput pin: 100 parallel Convert calls via
         /// Parallel.For to complement the Thread-based pin above. The
         /// ThreadPool scheduling differs from raw Thread scheduling, and
-        /// System.Text.Json's internal metadata-lock behaviour has
+        /// System.Text.Json's internal metadata-lock behavior has
         /// historically been sensitive to the difference; both paths are
         /// pinned so future STJ upgrades are covered.
         /// </summary>
@@ -346,5 +346,36 @@ namespace MTConnect.NET_JSON_Tests.Regressions
                 Assert.That(r, Is.EqualTo(canonical));
             }
         }
+
+#if NET8_0_OR_GREATER
+        /// <summary>
+        /// Freeze pin (net8+): the shared DefaultOptions and IndentOptions
+        /// singletons must be marked read-only at static-ctor time, so any
+        /// attempt to mutate their <see cref="JsonSerializerOptions.Converters"/>
+        /// collection throws <see cref="System.InvalidOperationException"/>.
+        /// The freeze is the enforcement half of the singleton pattern —
+        /// documentation alone would let a careless caller silently pollute
+        /// every other in-process serializer; the read-only lock makes the
+        /// misuse fail loudly at the point of the offending Add.
+        /// </summary>
+        [Test]
+        public void DefaultOptions_Converters_Add_throws_InvalidOperationException_when_frozen()
+        {
+            Assert.Throws<System.InvalidOperationException>(
+                () => JsonFunctions.DefaultOptions.Converters.Add(new NoopConverter()),
+                "DefaultOptions is a shared singleton and must be frozen on net8+ so a stray Converters.Add fails fast rather than silently mutating the process-wide instance.");
+        }
+
+        /// <summary>
+        /// Freeze pin (net8+) — IndentOptions mirror of the DefaultOptions guard.
+        /// </summary>
+        [Test]
+        public void IndentOptions_Converters_Add_throws_InvalidOperationException_when_frozen()
+        {
+            Assert.Throws<System.InvalidOperationException>(
+                () => JsonFunctions.IndentOptions.Converters.Add(new NoopConverter()),
+                "IndentOptions is a shared singleton and must be frozen on net8+ so a stray Converters.Add fails fast rather than silently mutating the process-wide instance.");
+        }
+#endif
     }
 }
