@@ -26,11 +26,13 @@ namespace MTConnect.NET_Common_Tests.Http
     ///   * body length equals the 2 MB buffer exactly — the loop exits on
     ///     the buffer-full branch instead of on EOF; the returned array is
     ///     the original 2 MB verbatim (no truncation).
-    ///   * pre-cancelled token / cancelled mid-drip — the ReadAsync
-    ///     override honours the token; the accumulator surfaces the
-    ///     OperationCanceledException on the swallowed-catch boundary and
-    ///     returns null, matching the pre-fix "return null on any throw"
-    ///     shape.
+    ///   * pre-cancelled token — the reader honours cancellation at
+    ///     entry; the accumulator propagates the <c>OperationCanceledException</c>
+    ///     rather than swallowing it, so the outer Ceen pipeline can
+    ///     surface the aborted-request signal to callers.
+    ///   * cancelled mid-drip — a token cancelled while the reader is
+    ///     awaiting the next chunk cancels the pending <c>ReadAsync</c>
+    ///     within one read cycle and propagates <c>OperationCanceledException</c>.
     ///   * body larger than the 2 MB buffer — the loop stops at the buffer
     ///     size; the returned array is exactly the buffer size (extra
     ///     bytes discarded, no exception).
@@ -108,6 +110,56 @@ namespace MTConnect.NET_Common_Tests.Http
 
             Assert.That(result, Is.Null,
                 "A null Stream input must be a benign null return, not a NullReferenceException.");
+        }
+
+        /// <summary>Pins the pre-cancelled-token boundary: when the caller passes a token that is already cancelled at entry, <c>ReadRequestBytes</c> propagates <c>OperationCanceledException</c> rather than reading to completion or swallowing the cancellation into a benign null return. Pre-fix, the method's signature did not accept a token, so the token was ignored and the read proceeded — the assertion below fails RED on the pre-fix HEAD.</summary>
+        [Test]
+        public void ReadRequestBytes_pre_cancelled_token_throws_immediately()
+        {
+            var body = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            using var scripted = new ScriptedStream(body);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            Assert.That(
+                async () => await Invoke(scripted, cts.Token),
+                Throws.InstanceOf<OperationCanceledException>(),
+                "A pre-cancelled token must surface as OperationCanceledException. "
+                + "Pre-fix, the accumulator ignored the token (signature took only Stream) "
+                + "and read the body to completion; post-fix, the token is honoured at the "
+                + "first ReadAsync and the outer catch preserves OperationCanceledException.");
+        }
+
+        /// <summary>Pins the mid-drip cancellation boundary: when the token is cancelled while the reader is awaiting the next chunk, the pending <c>ReadAsync</c> cancels within one read cycle and <c>OperationCanceledException</c> propagates within ~200 ms rather than the full drip duration. Pre-fix, the token was ignored and the read completed after the full ~1 s drip — the timeout assertion fails RED on the pre-fix HEAD.</summary>
+        [Test]
+        public void ReadRequestBytes_cancelled_mid_drip_throws_within_next_read()
+        {
+            // 100-byte body, 1 byte per read with a 10 ms per-read delay
+            // → ~1 s to drain in the happy path. Cancel after ~50 ms and
+            // expect OperationCanceledException within ~200 ms. Pre-fix,
+            // the token was not threaded to the ReadAsync overload so the
+            // drip completes normally and the assertion times out RED.
+            var body = new byte[100];
+            for (var i = 0; i < body.Length; i++)
+                body[i] = (byte)(i + 1);
+            using var slow = new ScriptedStream(body, chunkSize: 1, perReadDelay: TimeSpan.FromMilliseconds(10));
+            using var cts = new CancellationTokenSource();
+
+            Assert.That(
+                async () =>
+                {
+                    var invocation = Invoke(slow, cts.Token);
+                    // Give the reader time to start awaiting the first drip,
+                    // then request cancellation. The next ReadAsync's
+                    // Task.Delay(cancellationToken) throws immediately.
+                    cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+                    await invocation.WaitAsync(TimeSpan.FromMilliseconds(200));
+                },
+                Throws.InstanceOf<OperationCanceledException>(),
+                "A token cancelled mid-drip must surface as OperationCanceledException within "
+                + "the next ReadAsync cycle. Pre-fix, the accumulator ignored the token and "
+                + "read to completion after the full drip duration; post-fix, Task.Delay "
+                + "honours the token and the exception propagates through the outer catch.");
         }
 
         // -----------------------------------------------------------------
@@ -209,33 +261,83 @@ namespace MTConnect.NET_Common_Tests.Http
         // Helpers.
         // -----------------------------------------------------------------
 
-        private static async Task<byte[]?> Invoke(Stream? inputStream)
+        private static async Task<byte[]?> Invoke(Stream? inputStream, CancellationToken cancellationToken = default)
         {
             var handlerType = typeof(MTConnect.Servers.Http.MTConnectHttpServer).Assembly
                 .GetType("MTConnect.Servers.MTConnectPostResponseHandler", throwOnError: false)
                 ?? throw new InvalidOperationException("MTConnectPostResponseHandler not visible via reflection.");
-            var method = handlerType.GetMethod("ReadRequestBytes",
-                BindingFlags.NonPublic | BindingFlags.Static)
+
+            // Prefer the post-fix (Stream, CancellationToken) signature so
+            // the cancellation-boundary tests exercise the real token path.
+            // Fall back to the pre-fix (Stream)-only shape so this fixture
+            // stays runnable on the parent commit while the RED tests
+            // deliberately fail against it — the fallback drives the RED
+            // outcome (token is ignored → OperationCanceledException never
+            // fires → the Throws assertion fails).
+            var tokenMethod = handlerType.GetMethod(
+                "ReadRequestBytes",
+                BindingFlags.NonPublic | BindingFlags.Static,
+                binder: null,
+                types: new[] { typeof(Stream), typeof(CancellationToken) },
+                modifiers: null);
+            if (tokenMethod != null)
+            {
+                object? tokenTaskObj;
+                try
+                {
+                    tokenTaskObj = tokenMethod.Invoke(null, new object?[] { inputStream, cancellationToken });
+                }
+                catch (TargetInvocationException tie) when (tie.InnerException != null)
+                {
+                    // Unwrap so callers can Assert.Throws on the real exception.
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                        .Capture(tie.InnerException).Throw();
+                    throw; // unreachable
+                }
+                return await (Task<byte[]?>)tokenTaskObj!;
+            }
+
+            var legacyMethod = handlerType.GetMethod(
+                "ReadRequestBytes",
+                BindingFlags.NonPublic | BindingFlags.Static,
+                binder: null,
+                types: new[] { typeof(Stream) },
+                modifiers: null)
                 ?? throw new InvalidOperationException("ReadRequestBytes not found via reflection.");
-            var taskObj = method.Invoke(null, new object?[] { inputStream })!;
-            return await (Task<byte[]?>)taskObj;
+            object? legacyTaskObj;
+            try
+            {
+                legacyTaskObj = legacyMethod.Invoke(null, new object?[] { inputStream });
+            }
+            catch (TargetInvocationException tie) when (tie.InnerException != null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                    .Capture(tie.InnerException).Throw();
+                throw; // unreachable
+            }
+            return await (Task<byte[]?>)legacyTaskObj!;
         }
 
         /// <summary>
         /// A Stream that returns its content in fixed-size chunks (or one
         /// byte at a time by default) and then 0 on EOF. Mirrors real HTTP
-        /// request-body arrival patterns.
+        /// request-body arrival patterns. When <c>perReadDelay</c> is
+        /// non-null the async read overload awaits that delay under the
+        /// supplied cancellation token, so mid-drip cancellation cancels
+        /// the pending Task.Delay and surfaces OperationCanceledException.
         /// </summary>
         private sealed class ScriptedStream : Stream
         {
             private readonly byte[] _content;
             private readonly int _chunkSize;
+            private readonly TimeSpan? _perReadDelay;
             private int _position;
 
-            public ScriptedStream(byte[] content, int chunkSize = 1)
+            public ScriptedStream(byte[] content, int chunkSize = 1, TimeSpan? perReadDelay = null)
             {
                 _content = content;
                 _chunkSize = Math.Max(1, chunkSize);
+                _perReadDelay = perReadDelay;
             }
 
             public override bool CanRead => true;
@@ -259,10 +361,12 @@ namespace MTConnect.NET_Common_Tests.Http
                 return take;
             }
 
-            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return Task.FromResult(Read(buffer, offset, count));
+                if (_perReadDelay.HasValue)
+                    await Task.Delay(_perReadDelay.Value, cancellationToken).ConfigureAwait(false);
+                return Read(buffer, offset, count);
             }
 
             public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
