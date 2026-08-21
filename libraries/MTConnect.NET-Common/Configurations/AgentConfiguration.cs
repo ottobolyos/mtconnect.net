@@ -279,12 +279,18 @@ namespace MTConnect.Configurations
         /// </remarks>
         public void Normalize()
         {
-            // `??=` assigns the mirror only when the backing field is still null —
-            // i.e. neither a programmatic setter call nor a source-document key
-            // has latched DeviceValidationLevel to an explicit value. The
-            // sticky-suppression semantics (an explicit DVL assignment beats a
-            // later IVL change on the next Normalize) fall out of the null-check.
-            _deviceValidationLevel ??= MapInputToDeviceValidationLevel(_inputValidationLevel);
+            // Explicit null-check + assign assigns the mirror only when the
+            // backing field is still null — i.e. neither a programmatic setter
+            // call nor a source-document key has latched DeviceValidationLevel
+            // to an explicit value. The sticky-suppression semantics (an
+            // explicit DVL assignment beats a later IVL change on the next
+            // Normalize) fall out of the null-check. Written as a plain
+            // `if (x == null) x = y` rather than the C# 8 `??=` operator so
+            // the multi-TFM Release pack compiles under the oldest target
+            // framework's language version (net461/net47 default to C# 7.3);
+            // per Otto's "use the features of the oldest language version"
+            // directive 2026-08-21.
+            if (_deviceValidationLevel == null) _deviceValidationLevel = MapInputToDeviceValidationLevel(_inputValidationLevel);
         }
 
         /// <summary>
@@ -303,16 +309,24 @@ namespace MTConnect.Configurations
         /// <param name="value">The source <see cref="InputValidationLevel"/> to mirror.</param>
         /// <returns>The <see cref="DeviceValidationLevel"/> mirror of <paramref name="value"/>.</returns>
         /// <exception cref="InvalidOperationException">Thrown when <paramref name="value"/> is not a mapped arm — indicates the enum has grown without a corresponding switch arm here.</exception>
+        /// <remarks>
+        /// Written as a classical <c>switch</c> statement rather than the C# 8 switch
+        /// expression so the multi-TFM Release pack compiles under the oldest target
+        /// framework's language version (net461/net47 default to C# 7.3); the
+        /// exhaustive default arm preserves the runtime-throw semantics on any
+        /// unmapped ordinal. Per Otto's "use the features of the oldest language
+        /// version" directive 2026-08-21.
+        /// </remarks>
         private static DeviceValidationLevel MapInputToDeviceValidationLevel(InputValidationLevel value)
         {
-            return value switch
+            switch (value)
             {
-                InputValidationLevel.Ignore => DeviceValidationLevel.Ignore,
-                InputValidationLevel.Warning => DeviceValidationLevel.Warning,
-                InputValidationLevel.Remove => DeviceValidationLevel.Remove,
-                InputValidationLevel.Strict => DeviceValidationLevel.Strict,
-                _ => throw new InvalidOperationException($"Unmapped InputValidationLevel ordinal: {(int)value}")
-            };
+                case InputValidationLevel.Ignore: return DeviceValidationLevel.Ignore;
+                case InputValidationLevel.Warning: return DeviceValidationLevel.Warning;
+                case InputValidationLevel.Remove: return DeviceValidationLevel.Remove;
+                case InputValidationLevel.Strict: return DeviceValidationLevel.Strict;
+                default: throw new InvalidOperationException($"Unmapped InputValidationLevel ordinal: {(int)value}");
+            }
         }
 
         /// <summary>
