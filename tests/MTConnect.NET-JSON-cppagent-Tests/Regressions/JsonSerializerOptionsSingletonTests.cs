@@ -423,6 +423,36 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
             AssertWarmReachableGraphNewsUp(typeof(MTConnect.Devices.Json.JsonDevicesResponseDocument));
         }
 
+        /// <summary>
+        /// Structural warm-up-coverage pin (net8+) — companion assertion for
+        /// the F-IMP-C5-001 fix that populated the Error envelope with a
+        /// concrete <see cref="MTConnect.Headers.MTConnectErrorHeader"/> +
+        /// <see cref="MTConnect.Errors.Error"/> + <see cref="System.Version"/>.
+        /// STJ resolves accessors for interface-typed properties
+        /// (<c>IMTConnectErrorHeader Header</c>, <c>IEnumerable&lt;IError&gt; Errors</c>)
+        /// only when the value is non-null; a revert to a naked
+        /// <c>new ErrorResponseDocument()</c> would silently pass the
+        /// ErrorResponseDocument-only IL pin above while re-opening the
+        /// exact LCG-emit-on-first-error class F-IMP-C5-001 closed —
+        /// MTConnectErrorHeader (9 properties), Error (2), and
+        /// System.Version (6) would each pay their first cold accessor
+        /// emit on the first real cppagent-formatted error response. The
+        /// three <c>newobj</c> instructions below are the source-of-truth
+        /// evidence that the populated warm-up shape survives.
+        /// <para/>
+        /// System.Version is not news-up-ed by the three cppagent
+        /// surrogate envelopes' Header defaulting, so the walker match on
+        /// <c>System.Version</c> uniquely fingerprints the Error-envelope
+        /// initializer.
+        /// </summary>
+        [Test]
+        public void WarmReachableGraph_IL_contains_newobj_for_concrete_Error_envelope_fields()
+        {
+            AssertWarmReachableGraphNewsUp(typeof(MTConnect.Headers.MTConnectErrorHeader));
+            AssertWarmReachableGraphNewsUp(typeof(MTConnect.Errors.Error));
+            AssertWarmReachableGraphNewsUp(typeof(System.Version));
+        }
+
         // IL walker: locate a `newobj <ctor-of-expected>` instruction inside
         // JsonFunctions.WarmReachableGraph. Runs on the compiled test assembly's
         // view of MTConnect.NET-JSON-cppagent, so a source change that removes
