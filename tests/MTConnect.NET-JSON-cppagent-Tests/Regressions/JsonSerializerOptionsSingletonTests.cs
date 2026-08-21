@@ -437,13 +437,25 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
         /// MTConnectErrorHeader (9 properties), Error (2), and
         /// System.Version (6) would each pay their first cold accessor
         /// emit on the first real cppagent-formatted error response. The
-        /// three <c>newobj</c> instructions below are the source-of-truth
-        /// evidence that the populated warm-up shape survives.
+        /// three assertions below are the source-of-truth evidence that
+        /// the populated warm-up shape survives.
         /// <para/>
-        /// System.Version is not news-up-ed by the three cppagent
-        /// surrogate envelopes' Header defaulting, so the walker match on
-        /// <c>System.Version</c> uniquely fingerprints the Error-envelope
-        /// initializer.
+        /// The walker (<see cref="AssertWarmReachableGraphNewsUp"/>)
+        /// accepts either a <c>newobj</c> producing an instance of the
+        /// expected type OR a <c>ldsfld</c> loading a static field of
+        /// that type — semantically equivalent for warm-up, because STJ
+        /// walks the runtime type of whatever value the caller passes
+        /// into <see cref="System.Text.Json.JsonSerializer.Serialize"/>
+        /// regardless of how the instance was produced. The current
+        /// warm-up uses <c>MTConnectVersions.Version25</c> (a static
+        /// field of type <see cref="System.Version"/>) rather than a
+        /// magic <c>new System.Version(2, 5)</c> literal (F-CR-C6-001);
+        /// dropping either producer would fail the pin.
+        /// <para/>
+        /// System.Version is not news-up-ed OR ldsfld-loaded by the
+        /// three cppagent surrogate envelopes' Header defaulting, so
+        /// the walker match on <c>System.Version</c> uniquely
+        /// fingerprints the Error-envelope initializer.
         /// </summary>
         [Test]
         public void WarmReachableGraph_IL_contains_newobj_for_concrete_Error_envelope_fields()
@@ -453,19 +465,29 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
             AssertWarmReachableGraphNewsUp(typeof(System.Version));
         }
 
-        // IL walker: locate a `newobj <ctor-of-expected>` instruction inside
-        // JsonFunctions.WarmReachableGraph. Runs on the compiled test assembly's
-        // view of MTConnect.NET-JSON-cppagent, so a source change that removes
-        // the corresponding new-expression is caught deterministically at test
-        // time. Same walker as the plain-JSON sibling fixture; kept per-fixture
-        // to avoid a shared helper project just for this pin.
+        // IL walker: proves JsonFunctions.WarmReachableGraph feeds a concrete
+        // instance of <paramref name="expected"/> to STJ by locating EITHER a
+        // `newobj <ctor-of-expected>` (fresh allocation) OR a
+        // `ldsfld <static-field-of-type-expected>` (canonical-constant load)
+        // in the method body. Runs on the compiled test assembly's view of
+        // MTConnect.NET-JSON-cppagent, so a source change that removes both
+        // producers is caught deterministically at test time. Same walker
+        // shape as the plain-JSON sibling fixture; kept per-fixture to avoid
+        // a shared helper project just for this pin.
         //
-        // Scans for the 5-byte pattern <newobj:0x73> <4-byte-token>. Full
-        // opcode-length decoding is unnecessary: a spurious match would need a
-        // non-newobj opcode at byte i whose following 4 bytes coincidentally
-        // decode to a valid MemberRef token whose ResolveMethod returns a ctor
-        // of the target type — inside a ~35-byte method body, practically
+        // Scans for the 5-byte patterns <newobj:0x73> <4-byte-token> and
+        // <ldsfld:0x7E> <4-byte-token>. Full opcode-length decoding is
+        // unnecessary: a spurious match would need a non-target opcode at
+        // byte i whose following 4 bytes coincidentally decode to a valid
+        // MemberRef token whose ResolveMethod/ResolveField returns a target
+        // of the expected type — inside a ~40-byte method body, practically
         // impossible.
+        //
+        // Both producers are semantically equivalent for warm-up: STJ walks
+        // the runtime type of the value passed into Serialize, and cannot
+        // tell whether the instance came from a fresh newobj or from a
+        // static field load (e.g. MTConnectVersions.Version25 for
+        // System.Version).
         private static void AssertWarmReachableGraphNewsUp(System.Type expected)
         {
             var method = typeof(JsonFunctions).GetMethod(
@@ -482,20 +504,36 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
 
             for (int i = 0; i + 4 < il!.Length; i++)
             {
-                if (il[i] != 0x73) continue;
-                int token = System.BitConverter.ToInt32(il, i + 1);
-                System.Reflection.MethodBase? resolved;
-                try { resolved = module.ResolveMethod(token); }
-                catch { continue; }
-                if (resolved is System.Reflection.ConstructorInfo ctor
-                    && ctor.DeclaringType == expected)
+                if (il[i] == 0x73)
                 {
-                    return;
+                    // newobj <ctor>
+                    int token = System.BitConverter.ToInt32(il, i + 1);
+                    System.Reflection.MethodBase? resolved;
+                    try { resolved = module.ResolveMethod(token); }
+                    catch { continue; }
+                    if (resolved is System.Reflection.ConstructorInfo ctor
+                        && ctor.DeclaringType == expected)
+                    {
+                        return;
+                    }
+                }
+                else if (il[i] == 0x7E)
+                {
+                    // ldsfld <static-field>
+                    int token = System.BitConverter.ToInt32(il, i + 1);
+                    System.Reflection.FieldInfo? field;
+                    try { field = module.ResolveField(token); }
+                    catch { continue; }
+                    if (field != null && field.FieldType == expected)
+                    {
+                        return;
+                    }
                 }
             }
 
             Assert.Fail(
-                $"WarmReachableGraph must contain a newobj IL instruction for {expected.FullName}. " +
+                $"WarmReachableGraph must produce a concrete instance of {expected.FullName} " +
+                "(via `new` or via a static-field load) so STJ walks its accessor graph at assembly load. " +
                 "Without it, the first request that hits this envelope pays a cold LCG DynamicMethod emit " +
                 "against the frozen singleton — which is the +3.2-3.8 MB/h RSS leak-in-miniature the warm-up exists to prevent.");
         }
