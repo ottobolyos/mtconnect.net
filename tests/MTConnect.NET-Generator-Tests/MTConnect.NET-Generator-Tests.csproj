@@ -27,17 +27,4 @@
     <ProjectReference Include="..\..\build\MTConnect.NET-SysML-Import\MTConnect.NET-SysML-Import.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <!--
-    Shared-source link on SourceStripper.cs so SourceStripperTests can unit-
-    test the comment-stripper directly without linking the generator
-    executable's assembly. The generator project compiles SourceStripper into
-    its own bin/; the test project independently compiles the SAME source
-    into ITS own bin/ under the linked path SourceStripper.cs. Both
-    compilations produce equivalent code — the only observable difference
-    is which assembly hosts the type.
-  -->
-  <ItemGroup>
-    <Compile Include="..\..\build\MTConnect.NET-SysML-Import\SourceStripper.cs" Link="SourceStripper.cs" />
-  </ItemGroup>
-
 </Project>

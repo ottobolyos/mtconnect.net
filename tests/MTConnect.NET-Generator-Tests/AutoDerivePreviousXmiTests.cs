@@ -472,6 +472,78 @@ namespace MTConnect
         }
 
         [Test]
+        public void Prev_equals_new_warns_and_no_ops_when_new_xmi_filename_encodes_current_max()
+        {
+            // PREV == NEW guard: when the new XMI's filename encodes the same
+            // version as the auto-derived PREV_VERSION (from MTConnectVersions.Max),
+            // the delta is empty by construction — the max already matches the
+            // version being generated. Exit 0 + a warning on stderr, no delta
+            // emit. Filename convention is `MTConnectSysMLModel_v<major>.<minor>.xml`.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+            Assert.That(File.Exists(realXmi), Is.True,
+                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialised?");
+
+            var scratch = InitScratchRepoLayout("prev-eq-new-guard");
+            WriteSyntheticVersionsCs(scratch);
+
+            // Populate the cache so Strategy B resolves — the guard runs AFTER
+            // ResolvePreviousXmi succeeds. Without a cache, Strategy C would
+            // fire and exit 1 before the guard could evaluate.
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            File.Copy(realXmi, Path.Combine(cacheDir, "MTConnectSysMLModel_v2.7.xml"));
+
+            // Copy realXmi to a filename that matches MTConnectVersions.Max (v2.7)
+            // so the guard's filename regex matches and the versions equate.
+            var newXmiVersioned = Path.Combine(scratch, "MTConnectSysMLModel_v2.7.xml");
+            File.Copy(realXmi, newXmiVersioned);
+
+            var (exitCode, stdout, stderr) = RunAutoDerive(newXmiVersioned, scratch);
+
+            Assert.That(exitCode, Is.Zero,
+                $"PREV==NEW must exit 0 with warning, not fail.\nstdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stderr, Does.Contain("already supported by MTConnectVersions.Max"),
+                "stderr must announce the no-delta-to-derive warning so the operator sees why nothing was emitted.");
+            Assert.That(stderr, Does.Contain("v2.7"),
+                "stderr must name the version so the operator can verify the guard fired on the intended version.");
+            Assert.That(stdout, Does.Not.Contain("Delta emission:"),
+                "PREV==NEW must skip the delta emitter — no-op semantics.");
+        }
+
+        [Test]
+        public void Prev_equals_new_guard_stays_silent_when_new_xmi_filename_has_no_version_suffix()
+        {
+            // The PREV==NEW guard predicates on the new XMI filename encoding a
+            // version via the `_v<major>.<minor>.xml` suffix. A filename without
+            // that suffix (the default `MTConnectSysMLModel.xml` snapshot shape)
+            // must fall through to the normal delta emit — no warning, no early
+            // return, even when MTConnectVersions.Max would numerically match
+            // the underlying XMI's version. This preserves the default Phase 3
+            // workflow where the newXmi is the un-suffixed submodule snapshot.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("prev-eq-new-unsuffixed");
+            WriteSyntheticVersionsCs(scratch);
+
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            File.Copy(realXmi, Path.Combine(cacheDir, "MTConnectSysMLModel_v2.7.xml"));
+
+            // newXmi is realXmi at its default un-suffixed path — guard's regex
+            // does not match, guard stays silent, delta emitter runs.
+            var (exitCode, stdout, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.Zero,
+                $"Un-suffixed new-xmi filename must NOT trigger the guard.\nstdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stderr, Does.Not.Contain("already supported by MTConnectVersions.Max"),
+                "Un-suffixed filename must not trigger the PREV==NEW warning.");
+            Assert.That(stdout, Does.Contain("Delta emission:"),
+                "Un-suffixed filename must reach the delta emitter, not the guard's early return.");
+        }
+
+        [Test]
         public void Submodule_dir_without_git_repo_falls_through_to_fail_hard()
         {
             // Strategy A gates on TryGetSubmoduleTag returning a matching

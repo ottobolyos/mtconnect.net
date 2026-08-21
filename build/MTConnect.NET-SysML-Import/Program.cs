@@ -1,4 +1,3 @@
-using MTConnect.NET_SysML_Import.Internal;
 using MTConnect.SysML;
 using MTConnect.SysML.CSharp;
 using MTConnect.SysML.Json_cppagent;
@@ -175,6 +174,29 @@ if (!fullTree)
             var (resolvedXmi, previousVersion) = ResolvePreviousXmi(outputRoot);
             resolvedPreviousXmi = resolvedXmi;
             autoDerivedCompatLabel = $"v{previousVersion.Major}_{previousVersion.Minor}";
+
+            // PREV == NEW guard: when the new XMI's filename encodes the same
+            // version as the auto-derived PREV_VERSION (from MTConnectVersions.Max),
+            // the delta is empty by construction — MTConnectVersions.Max already
+            // matches the version being generated. Log a warning and no-op
+            // (skip delta generation, return success 0). The filename convention
+            // is `MTConnectSysMLModel_v<major>.<minor>.xml`; the case-insensitive
+            // `_[vV]` prefix admits both the lowercase and uppercase-V variants
+            // seen historically.
+            var newVersionMatch = Regex.Match(
+                Path.GetFileName(newXmiPath),
+                @"_[vV](?<major>\d+)\.(?<minor>\d+)\.xml$");
+            if (newVersionMatch.Success)
+            {
+                var newMajor = int.Parse(newVersionMatch.Groups["major"].Value);
+                var newMinor = int.Parse(newVersionMatch.Groups["minor"].Value);
+                if (newMajor == previousVersion.Major && newMinor == previousVersion.Minor)
+                {
+                    Console.Error.WriteLine(
+                        $"warning: latest MTConnect version (v{previousVersion.Major}.{previousVersion.Minor}) is already supported by MTConnectVersions.Max — no delta to derive; skipping emit.");
+                    return 0;
+                }
+            }
         }
         catch (Exception ex) when (ex is InvalidOperationException or FileNotFoundException)
         {
@@ -356,6 +378,16 @@ static (string XmiPath, Version PreviousVersion) ResolvePreviousXmi(string outpu
 // below, and returns that Version. Text parsing keeps the importer free of a
 // runtime dependency on MTConnect.NET-Common (which would create an awkward
 // generator-emits-into-its-own-dependency ordering during clean rebuilds).
+//
+// Both regexes are line-anchored (`(?m)^[ \t]*public…`) so a stale
+// `// Max => Version27;` decoy above the real declaration cannot match — the
+// `//` sits between line start and `public`, breaking the anchor. A last-match
+// preference (`.Matches().Last()`) is applied on both patterns so a
+// hypothetical block-commented decoy of the shape
+// `/* … public static Version Max => Version28; … */`
+// still loses to the live line below it. This is the F-SIMP-501 shrink;
+// no comment-stripper walker is required for the two-shape MTConnectVersions.cs
+// surface.
 static Version ReadMTConnectVersionsMax(string outputRoot)
 {
     var versionsPath = Path.Combine(
@@ -370,18 +402,23 @@ static Version ReadMTConnectVersionsMax(string outputRoot)
             versionsPath);
     }
 
-    // Strip C# comments before applying the regexes. Without this, a stale
-    // `// Max => Version27;` line commented out during a version bump would
-    // win the first-match against the real property declaration below it,
-    // pinning the parser to the wrong version. Also removes `/* ... */` block
-    // comments so a docblock example carrying the same convention shape does
-    // not leak into the parse.
-    var source = SourceStripper.StripComments(File.ReadAllText(versionsPath));
+    // Read the source raw and rely on a line-anchored regex to skip
+    // `// Max => Version27;` decoys — the `[ \t]*public` prefix at line start
+    // (multiline mode) cannot match a `//`-commented line because the `//`
+    // sits between line start and `public`. This is the F-SIMP-501 shrink:
+    // no comment stripper, no shared-source link, no literal-aware walker;
+    // just a targeted anchor plus a last-match preference so a hypothetical
+    // block-commented decoy above the real declaration still loses to the
+    // live line below it.
+    var source = File.ReadAllText(versionsPath);
 
-    // Match `public static Version Max => VersionXY;` — the naming convention
-    // is enforced by the hand-authored constant table above the Max property.
-    var maxMatch = Regex.Match(source, @"public\s+static\s+Version\s+Max\s*=>\s*Version(?<xy>\d+)\s*;");
-    if (!maxMatch.Success)
+    // Match `public static Version Max => VersionXY;` at line start (multiline)
+    // so a `// public static Version Max => Version27;` decoy is skipped by
+    // the `[ \t]*` prefix which admits only whitespace before `public`. The
+    // naming convention is enforced by the hand-authored constant table
+    // above the Max property.
+    var maxMatches = Regex.Matches(source, @"(?m)^[ \t]*public\s+static\s+Version\s+Max\s*=>\s*Version(?<xy>\d+)\s*;");
+    if (maxMatches.Count == 0)
     {
         throw new InvalidOperationException(
             $"Could not locate `public static Version Max => VersionXY;` in {versionsPath}. " +
@@ -390,15 +427,16 @@ static Version ReadMTConnectVersionsMax(string outputRoot)
             "or --full-tree to disable delta mode.");
     }
 
-    var xy = maxMatch.Groups["xy"].Value;
+    var xy = maxMatches[maxMatches.Count - 1].Groups["xy"].Value;
 
     // Match `public static readonly Version VersionXY = new Version(X, Y);`
     // so we can recover the major.minor pair. Accepts optional whitespace and
     // the `new(...)` target-typed form as well as the explicit `new Version(...)`.
-    var constMatch = Regex.Match(
+    // Same line-anchor discipline as above.
+    var constMatches = Regex.Matches(
         source,
-        $@"public\s+static\s+readonly\s+Version\s+Version{xy}\s*=\s*new(?:\s+Version)?\s*\(\s*(?<major>\d+)\s*,\s*(?<minor>\d+)\s*\)\s*;");
-    if (!constMatch.Success)
+        $@"(?m)^[ \t]*public\s+static\s+readonly\s+Version\s+Version{xy}\s*=\s*new(?:\s+Version)?\s*\(\s*(?<major>\d+)\s*,\s*(?<minor>\d+)\s*\)\s*;");
+    if (constMatches.Count == 0)
     {
         throw new InvalidOperationException(
             $"Could not locate `public static readonly Version Version{xy} = new Version(X, Y);` in {versionsPath}. " +
@@ -407,8 +445,9 @@ static Version ReadMTConnectVersionsMax(string outputRoot)
             "or --full-tree to disable delta mode.");
     }
 
-    var major = int.Parse(constMatch.Groups["major"].Value);
-    var minor = int.Parse(constMatch.Groups["minor"].Value);
+    var lastConst = constMatches[constMatches.Count - 1];
+    var major = int.Parse(lastConst.Groups["major"].Value);
+    var minor = int.Parse(lastConst.Groups["minor"].Value);
     return new Version(major, minor);
 }
 
