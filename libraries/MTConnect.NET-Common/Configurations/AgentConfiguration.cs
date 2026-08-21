@@ -167,8 +167,10 @@ namespace MTConnect.Configurations
             // still latches the mirror into the backing field so post-Normalize
             // serialisation carries the concrete value rather than null. Dime
             // cycle-2 finding M3-C2 — closes the programmatic-only footgun the
-            // load-path Normalize() call papered over.
-            get => _deviceValidationLevel ?? (DeviceValidationLevel)(int)_inputValidationLevel;
+            // load-path Normalize() call papered over. Cycle-3 F-SEC-002 replaced
+            // the raw `(DeviceValidationLevel)(int)_inputValidationLevel` cast
+            // with an exhaustive switch — see MapInputToDeviceValidationLevel.
+            get => _deviceValidationLevel ?? MapInputToDeviceValidationLevel(_inputValidationLevel);
             set
             {
                 ThrowIfUndefined(
@@ -266,7 +268,35 @@ namespace MTConnect.Configurations
             // has latched DeviceValidationLevel to an explicit value. The
             // sticky-suppression semantics (an explicit DVL assignment beats a
             // later IVL change on the next Normalize) fall out of the null-check.
-            _deviceValidationLevel ??= (DeviceValidationLevel)(int)_inputValidationLevel;
+            _deviceValidationLevel ??= MapInputToDeviceValidationLevel(_inputValidationLevel);
+        }
+
+        /// <summary>
+        /// Maps an <see cref="InputValidationLevel"/> onto its
+        /// <see cref="DeviceValidationLevel"/> mirror. Both enums currently share
+        /// ordinals 0-3, so the naive <c>(DeviceValidationLevel)(int)value</c>
+        /// bit-cast is behaviourally identical today — but the cast is a static
+        /// alias with no compile-time signal if either enum ever grows an
+        /// asymmetric arm (or reorders one). An explicit switch expression fires
+        /// CS8509 when a future <see cref="InputValidationLevel"/> arm lacks a
+        /// mapping, forcing the maintainer to decide the target-side mirror
+        /// intentionally. The default arm rethrows so a shipped mismatch is
+        /// surfaced at runtime rather than silently coercing to an undefined
+        /// <see cref="DeviceValidationLevel"/> value.
+        /// </summary>
+        /// <param name="value">The source <see cref="InputValidationLevel"/> to mirror.</param>
+        /// <returns>The <see cref="DeviceValidationLevel"/> mirror of <paramref name="value"/>.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when <paramref name="value"/> is not a mapped arm — indicates the enum has grown without a corresponding switch arm here.</exception>
+        private static DeviceValidationLevel MapInputToDeviceValidationLevel(InputValidationLevel value)
+        {
+            return value switch
+            {
+                InputValidationLevel.Ignore => DeviceValidationLevel.Ignore,
+                InputValidationLevel.Warning => DeviceValidationLevel.Warning,
+                InputValidationLevel.Remove => DeviceValidationLevel.Remove,
+                InputValidationLevel.Strict => DeviceValidationLevel.Strict,
+                _ => throw new InvalidOperationException($"Unmapped InputValidationLevel ordinal: {(int)value}")
+            };
         }
 
         /// <summary>
