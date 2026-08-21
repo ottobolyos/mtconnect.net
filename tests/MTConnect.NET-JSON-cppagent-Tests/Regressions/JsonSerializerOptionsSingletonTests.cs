@@ -380,33 +380,94 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
         }
 
         /// <summary>
-        /// Warm-up coverage pin (net8+) — <c>MTConnect.Errors.ErrorResponseDocument</c>
-        /// is the fourth top-level response envelope written directly by
+        /// Structural warm-up-coverage pin (net8+) — <c>WarmReachableGraph</c>'s
+        /// IL must contain a <c>newobj</c> instruction constructing
+        /// <see cref="MTConnect.Errors.ErrorResponseDocument"/>, the fourth
+        /// top-level response envelope written directly by
         /// <c>JsonHttpResponseDocumentFormatter.Format(IErrorResponseDocument, ...)</c>
-        /// without a cppagent-specific surrogate. The static-ctor
-        /// <c>WarmReachableGraph</c> pass must serialize an instance of it
-        /// against both option singletons BEFORE
-        /// <c>MakeReadOnly(populateMissingResolver: false)</c> — otherwise the
-        /// first error response (a /probe failure, unsupported device request,
-        /// or parse error) would pay a cold LCG DynamicMethod emit against
-        /// a frozen, resolver-less options and throw
-        /// <see cref="System.NotSupportedException"/>. Serializing a fresh
-        /// <see cref="MTConnect.Errors.ErrorResponseDocument"/> here reproduces
-        /// exactly that first-error path against the shared singletons; a
-        /// regression that dropped the Error warm-up would surface as a
-        /// NotSupportedException on this test.
+        /// without a cppagent-specific surrogate wrapper.
+        /// <para/>
+        /// A runtime <c>Assert.DoesNotThrow(() =&gt; Serialize(new ErrorResponseDocument(), frozen))</c>
+        /// check is tautological here: once the TypeInfoResolver is set (which
+        /// any preceding warm-up call does), STJ's <see cref="System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver"/>
+        /// lazily populates <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo"/>
+        /// on frozen options for arbitrary types — the frozen state only locks
+        /// the options' configuration surface (Converters, DefaultIgnoreCondition,
+        /// etc.), not the internal metadata cache. Verified empirically:
+        /// mutating out the <c>ErrorResponseDocument</c> warm-up line and running
+        /// the "can it serialize" pin still passes (see cycle-5 test-coverage-audit
+        /// mutation test 2026-08-21). The performance invariant the warm-up
+        /// enforces — pay the LCG DynamicMethod emit for ErrorResponseDocument
+        /// at assembly load, not on the first /probe error / parse-failure
+        /// request — is therefore only observable at the source-of-truth level:
+        /// the IL of <c>WarmReachableGraph</c>.
         /// </summary>
         [Test]
-        public void Frozen_singleton_can_serialize_ErrorResponseDocument_proving_Error_warm_up_ran()
+        public void WarmReachableGraph_IL_contains_newobj_for_ErrorResponseDocument_ctor()
         {
-            var document = new MTConnect.Errors.ErrorResponseDocument();
+            AssertWarmReachableGraphNewsUp(typeof(MTConnect.Errors.ErrorResponseDocument));
+        }
 
-            Assert.DoesNotThrow(
-                () => JsonSerializer.Serialize(document, JsonFunctions.DefaultOptions),
-                "Frozen DefaultOptions must have ErrorResponseDocument in its warmed TypeInfoResolver — a regression that removed the Error warm-up would surface here as NotSupportedException on the first error response.");
-            Assert.DoesNotThrow(
-                () => JsonSerializer.Serialize(document, JsonFunctions.IndentOptions),
-                "Frozen IndentOptions mirror — same Error warm-up invariant as DefaultOptions.");
+        /// <summary>
+        /// Structural warm-up-coverage pin (net8+) — companion assertion that
+        /// each of the three cppagent top-level response surrogates is also
+        /// news-up-ed by <c>WarmReachableGraph</c>. Mirrors the ErrorResponseDocument
+        /// pin above; the same tautology argument applies to per-type
+        /// "can it serialize" runtime checks.
+        /// </summary>
+        [Test]
+        public void WarmReachableGraph_IL_contains_newobj_for_every_top_level_response_surrogate()
+        {
+            AssertWarmReachableGraphNewsUp(typeof(MTConnect.Streams.Json.JsonStreamsResponseDocument));
+            AssertWarmReachableGraphNewsUp(typeof(MTConnect.Assets.Json.JsonAssetsResponseDocument));
+            AssertWarmReachableGraphNewsUp(typeof(MTConnect.Devices.Json.JsonDevicesResponseDocument));
+        }
+
+        // IL walker: locate a `newobj <ctor-of-expected>` instruction inside
+        // JsonFunctions.WarmReachableGraph. Runs on the compiled test assembly's
+        // view of MTConnect.NET-JSON-cppagent, so a source change that removes
+        // the corresponding new-expression is caught deterministically at test
+        // time. Same walker as the plain-JSON sibling fixture; kept per-fixture
+        // to avoid a shared helper project just for this pin.
+        //
+        // Scans for the 5-byte pattern <newobj:0x73> <4-byte-token>. Full
+        // opcode-length decoding is unnecessary: a spurious match would need a
+        // non-newobj opcode at byte i whose following 4 bytes coincidentally
+        // decode to a valid MemberRef token whose ResolveMethod returns a ctor
+        // of the target type — inside a ~35-byte method body, practically
+        // impossible.
+        private static void AssertWarmReachableGraphNewsUp(System.Type expected)
+        {
+            var method = typeof(JsonFunctions).GetMethod(
+                "WarmReachableGraph",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null,
+                "JsonFunctions.WarmReachableGraph private static method must exist.");
+            var body = method!.GetMethodBody();
+            Assert.That(body, Is.Not.Null,
+                "WarmReachableGraph must have a method body (not abstract / p-invoke).");
+            var il = body!.GetILAsByteArray();
+            Assert.That(il, Is.Not.Null);
+            var module = method.Module;
+
+            for (int i = 0; i + 4 < il!.Length; i++)
+            {
+                if (il[i] != 0x73) continue;
+                int token = System.BitConverter.ToInt32(il, i + 1);
+                System.Reflection.MethodBase? resolved;
+                try { resolved = module.ResolveMethod(token); }
+                catch { continue; }
+                if (resolved is System.Reflection.ConstructorInfo ctor
+                    && ctor.DeclaringType == expected)
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                $"WarmReachableGraph must contain a newobj IL instruction for {expected.FullName}. " +
+                "Without it, the first request that hits this envelope pays a cold LCG DynamicMethod emit " +
+                "against the frozen singleton — which is the +3.2-3.8 MB/h RSS leak-in-miniature the warm-up exists to prevent.");
         }
 #endif
     }
