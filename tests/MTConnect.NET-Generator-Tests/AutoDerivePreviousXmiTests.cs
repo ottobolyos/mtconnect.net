@@ -1,0 +1,480 @@
+// Copyright (c) 2026 TrakHound Inc., All Rights Reserved.
+// TrakHound Inc. licenses this file to you under the MIT license.
+
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using NUnit.Framework;
+
+namespace MTConnect.NET_Generator_Tests
+{
+    /// <summary>
+    /// Zero-config PREV_VERSION auto-derive coverage for the SysML importer
+    /// (task #408 amendment to PR #233 Phase 4).
+    ///
+    /// <para>
+    /// When neither <c>--previous-xmi</c> nor <c>--full-tree</c> is supplied,
+    /// the importer parses <c>MTConnectVersions.Max</c> from
+    /// <c>libraries/MTConnect.NET-Common/MTConnectVersions.cs</c> under
+    /// <c>--output</c> and resolves the prior-version XMI in this priority
+    /// order:
+    /// <list type="number">
+    ///   <item>
+    ///     Strategy B (primary):
+    ///     <c>build/.cache/sysml-prev/MTConnectSysMLModel_v${PREV_VERSION}.xml</c>.
+    ///   </item>
+    ///   <item>
+    ///     Strategy A (fallback):
+    ///     <c>build/sysml-model/MTConnectSysMLModel.xml</c>, gated on
+    ///     <c>git -C build/sysml-model describe --exact-match --tags HEAD</c>
+    ///     returning <c>v${PREV_VERSION}</c> exactly.
+    ///   </item>
+    ///   <item>
+    ///     Strategy C (fail-hard): throw with an actionable message when
+    ///     neither resolves.
+    ///   </item>
+    /// </list>
+    /// </para>
+    ///
+    /// <para>
+    /// Every case here is exercised end-to-end via <c>dotnet run --no-build
+    /// --project build/MTConnect.NET-SysML-Import</c> against a synthetic
+    /// <c>--output</c> scratch tree that mimics the repo layout so the
+    /// auto-derive resolver sees a controlled world: a pinned
+    /// <c>MTConnectVersions.cs</c>, a curated cache directory, and (where
+    /// needed) a synthetic git-tagged <c>build/sysml-model</c>. The
+    /// assertions bind to the CLI contract, not to any internal helper.
+    /// </para>
+    /// </summary>
+    [TestFixture]
+    public class AutoDerivePreviousXmiTests
+    {
+        private const string SlnFileName = "MTConnect.NET.sln";
+        private const string GeneratorProject = "build/MTConnect.NET-SysML-Import";
+        private const string RealXmiRelativePath = "build/sysml-model/MTConnectSysMLModel.xml";
+        private const string ScratchRoot = ".claude/gen-test-out/auto-derive";
+
+        // A minimal MTConnectVersions.cs skeleton — enough for the auto-derive
+        // regex to lock onto `public static Version Max => VersionXY;` and
+        // `public static readonly Version VersionXY = new Version(X, Y);`. The
+        // constants below cover the Max we pin the tests against; the
+        // `Version27` constant matches the current-tree Max at #233 landing
+        // so the tests stay in step with the shipped fixture XMI.
+        private const string SyntheticVersionsCs = @"// Copyright (c) 2026 TrakHound Inc.
+
+using System;
+
+namespace MTConnect
+{
+    public static class MTConnectVersions
+    {
+        public static Version Max => Version27;
+
+        public static readonly Version Version26 = new Version(2, 6);
+        public static readonly Version Version27 = new Version(2, 7);
+    }
+}
+";
+
+        [Test]
+        public void Auto_derive_from_MTConnectVersionsMax_uses_cache_when_present()
+        {
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+            Assert.That(File.Exists(realXmi), Is.True,
+                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialised?");
+
+            var scratch = InitScratchRepoLayout("cache-primary");
+            WriteSyntheticVersionsCs(scratch);
+
+            // Strategy B setup: populate the cache path with the current-tree
+            // XMI as a stand-in for the prior-version XMI. Using the same bytes
+            // for --new-xmi and the cache produces a "same XMI on both sides"
+            // delta — every emitted file lands in the UNCHANGED-concentrated
+            // partition, so the stdout stats line is grep-able for
+            // `unchanged-concentrated=N>0` and the Compat file appears at the
+            // expected auto-derived label path.
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            var cachePath = Path.Combine(cacheDir, "MTConnectSysMLModel_v2.7.xml");
+            File.Copy(realXmi, cachePath);
+
+            var (exitCode, stdout, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.Zero,
+                $"Auto-derive with cache present should succeed.\nstdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stdout, Does.Contain("auto-derived from MTConnectVersions.Max"),
+                "stdout must announce that PREV_VERSION was auto-derived so the operator sees which strategy fired.");
+            Assert.That(stdout, Does.Contain("MTConnectSysMLModel_v2.7.xml"),
+                "stdout must echo the resolved cache path so the operator can verify Strategy B ran.");
+            Assert.That(stdout, Does.Contain("Delta emission:"),
+                "Auto-derive must reach the delta emitter, not the full-tree branch.");
+
+            // The auto-derived Compat label is `v2_7` (from Max = Version27),
+            // and same-XMI-on-both-sides forces every file into the UNCHANGED
+            // partition — so exactly one Compat/v2_7.g.cs lands per library.
+            var compatFiles = Directory
+                .EnumerateFiles(scratch, "v2_7.g.cs", SearchOption.AllDirectories)
+                .Select(p => p.Replace('\\', '/'))
+                .Where(p => p.Contains("/Compat/"))
+                .ToList();
+            Assert.That(compatFiles.Count, Is.EqualTo(3),
+                "One auto-labelled Compat file per library (three libraries): "
+                + string.Join(", ", compatFiles));
+        }
+
+        [Test]
+        public void Auto_derive_from_MTConnectVersionsMax_falls_back_to_submodule_tag_when_cache_absent()
+        {
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+            Assert.That(File.Exists(realXmi), Is.True,
+                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialised?");
+
+            var scratch = InitScratchRepoLayout("submodule-fallback");
+            WriteSyntheticVersionsCs(scratch);
+            // No cache path populated — Strategy B misses. Strategy A must fire.
+
+            // Strategy A setup: build a synthetic git repo at
+            // <scratch>/build/sysml-model, drop the XMI in, and tag HEAD as
+            // v2.7 (matching MTConnectVersions.Max in the synthetic
+            // MTConnectVersions.cs). The auto-derive resolver runs
+            // `git -C build/sysml-model describe --exact-match --tags HEAD`
+            // and accepts the tree only when the tag matches exactly.
+            var submoduleDir = Path.Combine(scratch, "build", "sysml-model");
+            Directory.CreateDirectory(submoduleDir);
+            File.Copy(realXmi, Path.Combine(submoduleDir, "MTConnectSysMLModel.xml"));
+            InitGitRepoWithTag(submoduleDir, "v2.7");
+
+            var (exitCode, stdout, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.Zero,
+                $"Auto-derive with only the submodule-tag path available should succeed.\n"
+                + $"stdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stdout, Does.Contain("auto-derived from MTConnectVersions.Max"),
+                "stdout must announce the auto-derive.");
+            Assert.That(stdout, Does.Contain(Path.Combine(submoduleDir, "MTConnectSysMLModel.xml")),
+                "stdout must echo the resolved submodule XMI path so the operator can verify Strategy A ran.");
+            Assert.That(stdout, Does.Contain("Delta emission:"),
+                "Strategy A must reach the delta emitter, not the full-tree branch.");
+        }
+
+        [Test]
+        public void Auto_derive_from_MTConnectVersionsMax_fails_hard_when_neither_cache_nor_tag_resolves()
+        {
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("fail-hard");
+            WriteSyntheticVersionsCs(scratch);
+            // No cache populated. No submodule directory populated.
+
+            var (exitCode, _, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.Not.Zero,
+                "Neither Strategy B nor Strategy A resolving must fail the invocation, not silently no-op.");
+            Assert.That(stderr, Does.Contain("PREV_VERSION auto-derivation"),
+                "stderr must name the auto-derive failure class so the operator knows which resolver aborted.");
+            Assert.That(stderr, Does.Contain("MTConnectVersions.Max = 2.7"),
+                "stderr must state the resolved PREV_VERSION so the operator can cross-check the current Max.");
+            Assert.That(stderr, Does.Contain("MTConnectSysMLModel_v2.7.xml"),
+                "stderr must name the probed cache path so the operator can drop the file in.");
+            Assert.That(stderr, Does.Contain("v2.7"),
+                "stderr must name the expected submodule tag so the operator can check the submodule tip.");
+            Assert.That(stderr, Does.Contain("--previous-xmi"),
+                "stderr must direct the operator to the explicit-override flag.");
+            Assert.That(stderr, Does.Contain("--full-tree"),
+                "stderr must direct the operator to the delta-disable escape hatch.");
+        }
+
+        [Test]
+        public void Explicit_previous_xmi_wins_over_auto_derive()
+        {
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("explicit-wins");
+            WriteSyntheticVersionsCs(scratch);
+
+            // Populate the cache with a MUTATED copy of the XMI. If the
+            // resolver picked the cache (Strategy B) over the explicit
+            // --previous-xmi, the delta would surface CoordinateSystem-shaped
+            // changes (from the mutation) instead of zero-change output. The
+            // explicit --previous-xmi points at the pristine XMI, matching
+            // --new-xmi bit-for-bit, so a correctly-prioritised resolver
+            // produces `changed=0` while a broken one produces `changed>0`.
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            var cachePath = Path.Combine(cacheDir, "MTConnectSysMLModel_v2.7.xml");
+            var mutated = File.ReadAllText(realXmi)
+                .Replace(
+                    "unchangeable coordinate system that has machine zero as its origin.",
+                    "OVERRIDE_TEST_MARKER coordinate system that has machine zero as its origin.");
+            File.WriteAllText(cachePath, mutated);
+
+            var (exitCode, stdout, stderr) = RunWithExplicitPrevious(realXmi, previousXmi: realXmi, scratch);
+
+            Assert.That(exitCode, Is.Zero,
+                $"Explicit --previous-xmi should succeed even when the cache carries a different XMI.\n"
+                + $"stdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stdout, Does.Not.Contain("auto-derived from MTConnectVersions.Max"),
+                "Explicit --previous-xmi must skip the auto-derive announcement — the delta is operator-directed.");
+            Assert.That(stdout, Does.Contain("--previous-xmi override"),
+                "stdout must announce the explicit-override mode so the operator sees which path fired.");
+
+            // If the resolver had picked the cache, the mutation would surface
+            // as CHANGED files. With the explicit prev matching the new XMI,
+            // changed=0.
+            var stats = ParseChanged(stdout);
+            Assert.That(stats, Is.Zero,
+                "Explicit --previous-xmi matched --new-xmi bit-for-bit; changed must be zero. "
+                + "A non-zero count means the cache leaked into the delta — the explicit override lost.");
+        }
+
+        [Test]
+        public void Full_tree_flag_disables_delta_mode()
+        {
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("full-tree");
+            WriteSyntheticVersionsCs(scratch);
+
+            // Populate the cache so auto-derive WOULD succeed if it were
+            // allowed to run. --full-tree must skip both delta paths and
+            // trigger the full-tree branch instead, producing no Compat
+            // file and no `Delta emission:` stats line.
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            File.Copy(realXmi, Path.Combine(cacheDir, "MTConnectSysMLModel_v2.7.xml"));
+
+            var (exitCode, stdout, stderr) = RunWithFullTree(realXmi, scratch);
+
+            Assert.That(exitCode, Is.Zero,
+                $"--full-tree must succeed against a valid tree.\nstdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stdout, Does.Contain("full-tree"),
+                "stdout must announce that the full-tree path fired.");
+            Assert.That(stdout, Does.Not.Contain("Delta emission:"),
+                "--full-tree must skip the delta emitter's stats line — the delta path is fully disabled.");
+            Assert.That(stdout, Does.Not.Contain("auto-derived from MTConnectVersions.Max"),
+                "--full-tree must short-circuit before the auto-derive resolver runs.");
+
+            var compatFiles = Directory
+                .EnumerateFiles(scratch, "*.g.cs", SearchOption.AllDirectories)
+                .Where(p => p.Replace('\\', '/').Contains("/Compat/"))
+                .ToList();
+            Assert.That(compatFiles, Is.Empty,
+                "--full-tree must emit zero Compat/*.g.cs files (Compat is delta-mode-only). "
+                + "Unexpected Compat files:\n  " + string.Join("\n  ", compatFiles));
+
+            // Full-tree emits the whole tree — at least the current-XMI
+            // baseline count of files. A cheap sanity check on the emission
+            // shape without pinning the exact count (which drifts with each
+            // spec bump).
+            var emittedFiles = Directory
+                .EnumerateFiles(scratch, "*.g.cs", SearchOption.AllDirectories)
+                .Count();
+            Assert.That(emittedFiles, Is.GreaterThan(100),
+                "--full-tree must emit the whole generated tree, not the delta subset. "
+                + $"Actual .g.cs count: {emittedFiles}.");
+        }
+
+        // --- helpers -----------------------------------------------------
+
+        private static string FindRepoRoot()
+        {
+            var current = new DirectoryInfo(AppContext.BaseDirectory);
+            while (current != null)
+            {
+                if (File.Exists(Path.Combine(current.FullName, SlnFileName)))
+                    return current.FullName;
+                current = current.Parent;
+            }
+            throw new DirectoryNotFoundException(
+                $"Could not locate {SlnFileName} in any ancestor of {AppContext.BaseDirectory}.");
+        }
+
+        // Creates the scratch dir with a repo-like layout: the three library
+        // subdirectories the renderers guard against, plus the build/ tree
+        // ancestor that the cache and submodule strategies probe under.
+        private static string InitScratchRepoLayout(string suffix)
+        {
+            var repoRoot = FindRepoRoot();
+            var path = Path.Combine(repoRoot, ScratchRoot, suffix);
+            if (Directory.Exists(path))
+            {
+                // A prior test run may have left a synthetic git repo behind
+                // whose .git/objects tree resists a plain recursive delete on
+                // some filesystems. Two-pass delete: first try recursive,
+                // then if that fails, chmod the tree writable and retry.
+                TryDeleteTree(path);
+            }
+            Directory.CreateDirectory(path);
+            Directory.CreateDirectory(Path.Combine(path, "libraries", "MTConnect.NET-Common"));
+            Directory.CreateDirectory(Path.Combine(path, "libraries", "MTConnect.NET-JSON-cppagent"));
+            Directory.CreateDirectory(Path.Combine(path, "libraries", "MTConnect.NET-XML"));
+            Directory.CreateDirectory(Path.Combine(path, "build"));
+            return path;
+        }
+
+        private static void TryDeleteTree(string path)
+        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Loose read-only bits on git pack files trip the plain delete
+                // on Windows; clear them and retry once.
+                foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                {
+                    try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
+                }
+                Directory.Delete(path, recursive: true);
+            }
+        }
+
+        private static void WriteSyntheticVersionsCs(string scratch)
+        {
+            var target = Path.Combine(
+                scratch, "libraries", "MTConnect.NET-Common", "MTConnectVersions.cs");
+            File.WriteAllText(target, SyntheticVersionsCs);
+        }
+
+        // Bootstraps a minimal git repo at `dir`, stages every present file,
+        // commits, and tags the commit `tagName`. The auto-derive Strategy A
+        // path runs `git -C <dir> describe --exact-match --tags HEAD`; this
+        // helper produces the shape that lookup expects.
+        //
+        // Every git config that could pull in a signing hook is disabled
+        // per-repo (commit.gpgsign, tag.gpgsign, tag.forceSignAnnotated) so the
+        // helper works on a developer host with the tester's global-config
+        // signing hooks (ottobolyos runs `commit.gpgsign=true` + `tag.gpgsign=true`
+        // globally — those defaults would abort the synthetic tag on a host
+        // without a matching GPG key context).
+        private static void InitGitRepoWithTag(string dir, string tagName)
+        {
+            RunGit(dir, "init", "-q");
+            RunGit(dir, "config", "user.email", "auto-derive-test@example.invalid");
+            RunGit(dir, "config", "user.name", "Auto Derive Test");
+            RunGit(dir, "config", "commit.gpgsign", "false");
+            RunGit(dir, "config", "tag.gpgsign", "false");
+            RunGit(dir, "config", "tag.forceSignAnnotated", "false");
+            RunGit(dir, "add", "-A");
+            RunGit(dir, "commit", "-q", "-m", "synthetic sysml-model snapshot for auto-derive test");
+            // Explicit lightweight tag — no `-a`, no `-s`, no message — so the
+            // synthetic tag lands regardless of tester-side GPG state. The
+            // per-repo `tag.gpgsign=false` above is defence-in-depth for the
+            // same concern.
+            RunGit(dir, "tag", tagName);
+        }
+
+        private static void RunGit(string workingDir, params string[] args)
+        {
+            var psi = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = workingDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (var a in args)
+                psi.ArgumentList.Add(a);
+
+            using var proc = Process.Start(psi)
+                ?? throw new InvalidOperationException($"Failed to start git {string.Join(' ', args)}.");
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
+            proc.WaitForExit();
+            if (proc.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"git {string.Join(' ', args)} exited {proc.ExitCode} in {workingDir}. " +
+                    $"stderr:\n{stderrTask.Result}");
+            }
+        }
+
+        // Auto-derive invocation shape: only --new-xmi + --output. No
+        // --previous-xmi, no --full-tree — this is exactly the zero-config
+        // form Phase 3 of the version-bump plan calls.
+        private static (int ExitCode, string Stdout, string Stderr) RunAutoDerive(
+            string newXmi, string output)
+        {
+            return RunGenerator(output, "--new-xmi", newXmi, "--output", output);
+        }
+
+        private static (int ExitCode, string Stdout, string Stderr) RunWithExplicitPrevious(
+            string newXmi, string previousXmi, string output)
+        {
+            return RunGenerator(output,
+                "--new-xmi", newXmi,
+                "--previous-xmi", previousXmi,
+                "--output", output);
+        }
+
+        private static (int ExitCode, string Stdout, string Stderr) RunWithFullTree(
+            string newXmi, string output)
+        {
+            return RunGenerator(output,
+                "--new-xmi", newXmi,
+                "--output", output,
+                "--full-tree");
+        }
+
+        private static (int ExitCode, string Stdout, string Stderr) RunGenerator(
+            string outputRootForCwd, params string[] cliArgs)
+        {
+            var repoRoot = FindRepoRoot();
+            var psi = new ProcessStartInfo("dotnet")
+            {
+                // Run `dotnet run` from the REAL repo root so the generator
+                // project builds correctly (the ProjectReference on the test
+                // csproj already built it, and --no-build below reuses that
+                // output). The generator's --output points at the SCRATCH
+                // dir, so all path probes land there.
+                WorkingDirectory = repoRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("run");
+            psi.ArgumentList.Add("--no-build");
+            psi.ArgumentList.Add("--project");
+            psi.ArgumentList.Add(GeneratorProject);
+            psi.ArgumentList.Add("--");
+            foreach (var arg in cliArgs)
+                psi.ArgumentList.Add(arg);
+
+            using var proc = Process.Start(psi)
+                ?? throw new InvalidOperationException("Failed to start dotnet run for the generator.");
+
+            // Drain stdout and stderr concurrently — see ByteIdenticalRegenTests
+            // for the deadlock defence this pattern encodes.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
+            proc.WaitForExit();
+            return (proc.ExitCode, stdoutTask.Result, stderrTask.Result);
+        }
+
+        // Extracts the `changed=N` value from the delta stats line so the
+        // explicit-override test can pin the CHANGED count. Returns -1 on
+        // absent stats line (which is a distinct failure mode from
+        // changed=0).
+        private static int ParseChanged(string stdout)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                stdout, @"Delta emission:.*?changed=(?<c>\d+)");
+            if (!match.Success)
+                throw new AssertionException(
+                    "stdout does not carry the expected 'Delta emission: ... changed=N ...' stats line.\n"
+                    + stdout);
+            return int.Parse(match.Groups["c"].Value);
+        }
+    }
+}

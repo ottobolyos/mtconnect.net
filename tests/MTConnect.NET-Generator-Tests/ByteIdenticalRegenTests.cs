@@ -166,6 +166,12 @@ namespace MTConnect.NET_Generator_Tests
             psi.ArgumentList.Add(xmiPath);
             psi.ArgumentList.Add("--output");
             psi.ArgumentList.Add(scratchRoot);
+            // --full-tree pins the byte-identical guard to the full-regeneration
+            // path. Without it the zero-config auto-derive (task #408) would
+            // kick in against the scratch dir, which lacks
+            // libraries/MTConnect.NET-Common/MTConnectVersions.cs, and abort
+            // with a PREV_VERSION resolver error before any templates render.
+            psi.ArgumentList.Add("--full-tree");
 
             using var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException("Failed to start dotnet run for the generator.");

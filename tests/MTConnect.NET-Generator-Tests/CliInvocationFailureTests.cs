@@ -67,9 +67,11 @@ namespace MTConnect.NET_Generator_Tests
             var scratch = InitScratch("missing-xmi");
             var (exitCode, _, stderr) = Run("--output", scratch);
             Assert.That(exitCode, Is.EqualTo(2),
-                "Missing --xmi is a usage error; exit 2.");
-            Assert.That(stderr, Does.Contain("--xmi"),
+                "Missing --new-xmi is a usage error; exit 2.");
+            Assert.That(stderr, Does.Contain("--new-xmi"),
                 "stderr should identify which required flag is missing.");
+            Assert.That(stderr, Does.Contain("--xmi"),
+                "stderr should also mention the legacy --xmi alias so operators grepping for the pre-#233 flag name still see the required-flag hint.");
             Assert.That(stderr, Does.Contain("required"),
                 "stderr should call out that the flag is required.");
         }
@@ -140,12 +142,16 @@ namespace MTConnect.NET_Generator_Tests
                 "--help is a documented success path; exit 0.");
             Assert.That(stdout, Does.Contain("MTConnect.NET SysML Importer"),
                 "Help output must carry the tool banner so the operator knows what they're using.");
+            Assert.That(stdout, Does.Contain("--new-xmi"),
+                "Help must list --new-xmi (preferred flag; task #408).");
             Assert.That(stdout, Does.Contain("--xmi"),
-                "Help must list --xmi.");
+                "Help must also mention --xmi (legacy alias documented for pre-#408 callers).");
             Assert.That(stdout, Does.Contain("--previous-xmi"),
                 "Help must list --previous-xmi (added in Phase 4.3).");
             Assert.That(stdout, Does.Contain("--compat-version-label"),
                 "Help must list --compat-version-label (added in Phase 4.3).");
+            Assert.That(stdout, Does.Contain("--full-tree"),
+                "Help must list --full-tree (added in task #408 as the escape hatch that disables both delta paths).");
         }
 
         [Test]
@@ -227,12 +233,16 @@ namespace MTConnect.NET_Generator_Tests
         {
             // Output root exists, but the required libraries/MTConnect.NET-Common
             // subdirectory is absent. Program's RenderCommonClasses fails
-            // fast with a DirectoryNotFoundException.
+            // fast with a DirectoryNotFoundException. Pass --full-tree so the
+            // zero-config auto-derive path doesn't intercept first with its
+            // own "MTConnectVersions.cs not found" surface — this fixture is
+            // pinning the RenderCommonClasses failure, not the auto-derive
+            // failure (that path is covered by AutoDerivePreviousXmiTests).
             var repoRoot = FindRepoRoot();
             var xmi = Path.Combine(repoRoot, XmiRelativePath);
             var scratch = InitScratch("missing-lib-subdir");
             // Deliberately do NOT create the libraries/MTConnect.NET-Common subdir.
-            var (exitCode, _, stderr) = Run("--xmi", xmi, "--output", scratch);
+            var (exitCode, _, stderr) = Run("--xmi", xmi, "--output", scratch, "--full-tree");
             Assert.That(exitCode, Is.Not.Zero,
                 "A missing library subdirectory must fail fast, not silently no-op.");
             Assert.That(stderr, Does.Contain("MTConnect.NET-Common").Or.Contain("DirectoryNotFoundException"),
@@ -259,7 +269,11 @@ namespace MTConnect.NET_Generator_Tests
             // try/catch that mapped every parse exception to `return 1;`);
             // that hardening is tracked as a follow-up finding.
             File.WriteAllText(badXmi, "<?xml version=\"1.0\"?><notxmi/>");
-            var (exitCode, stdout, stderr) = Run("--xmi", badXmi, "--output", scratch);
+            // --full-tree so the parse failure lands in the full-tree branch, not
+            // in the zero-config auto-derive's PREV_VERSION resolver — this
+            // fixture is pinning the parse-failure surface, not the auto-derive
+            // one (that path is covered by AutoDerivePreviousXmiTests).
+            var (exitCode, stdout, stderr) = Run("--xmi", badXmi, "--output", scratch, "--full-tree");
             Assert.That(exitCode, Is.Not.Zero,
                 $"A malformed XMI must fail the invocation. exit={exitCode}\nstdout:\n{stdout}\nstderr:\n{stderr}");
             var combined = stdout + "\n" + stderr;
@@ -279,7 +293,11 @@ namespace MTConnect.NET_Generator_Tests
             var xmi = Path.Combine(repoRoot, XmiRelativePath);
             var scratch = InitScratchWithLibraries("json-dump");
             var dumpPath = Path.Combine(scratch, "model.json");
-            var (exitCode, stdout, stderr) = Run("--xmi", xmi, "--output", scratch, "--json-dump", dumpPath);
+            // --full-tree so the JSON-dump path is exercised without the
+            // zero-config auto-derive stepping in (which would resolve to the
+            // same-tree v2.7 XMI and successfully run delta mode, wasting time
+            // on a delta the test doesn't assert against).
+            var (exitCode, stdout, stderr) = Run("--xmi", xmi, "--output", scratch, "--json-dump", dumpPath, "--full-tree");
             Assert.That(exitCode, Is.Zero,
                 $"--json-dump plus a valid XMI + output should succeed.\nstdout:\n{stdout}\nstderr:\n{stderr}");
             Assert.That(File.Exists(dumpPath), Is.True,
