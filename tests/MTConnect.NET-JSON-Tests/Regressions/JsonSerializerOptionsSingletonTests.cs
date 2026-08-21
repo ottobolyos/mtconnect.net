@@ -15,11 +15,11 @@ namespace MTConnect.NET_JSON_Tests.Regressions
     /// <summary>
     /// Regression pin for the DIME-connector native-heap leak (peer
     /// diagnosis dated 2026-08-21). A fresh <see cref="JsonSerializerOptions"/>
-    /// instance owns its own serialisation-metadata cache; building that
+    /// instance owns its own serialization-metadata cache; building that
     /// cache emits reflection-based property accessors for the entire type
     /// graph, and the emitted code accumulates in the runtime's loader
     /// heaps where the GC cannot reclaim it. Allocating one on every
-    /// serialisation call therefore leaked ~3.3 MB/h RSS in production
+    /// serialization call therefore leaked ~3.3 MB/h RSS in production
     /// (tempco-001, tim-001).
     ///
     /// The <see cref="JsonFunctions.DefaultOptions"/> and
@@ -63,7 +63,7 @@ namespace MTConnect.NET_JSON_Tests.Regressions
             }
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: default options returns the same instance on repeat access.</summary>
+        /// <summary>Pins the behavior expressed by the test name: default options returns the same instance on repeat access.</summary>
         [Test]
         public void DefaultOptions_returns_the_same_instance_on_repeat_access()
         {
@@ -73,7 +73,7 @@ namespace MTConnect.NET_JSON_Tests.Regressions
                 "JsonFunctions.DefaultOptions must be a shared singleton — a fresh JsonSerializerOptions per call leaks LCG-emitted metadata into the loader heap.");
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: indent options returns the same instance on repeat access.</summary>
+        /// <summary>Pins the behavior expressed by the test name: indent options returns the same instance on repeat access.</summary>
         [Test]
         public void IndentOptions_returns_the_same_instance_on_repeat_access()
         {
@@ -83,7 +83,7 @@ namespace MTConnect.NET_JSON_Tests.Regressions
                 "JsonFunctions.IndentOptions must be a shared singleton — a fresh JsonSerializerOptions per call leaks LCG-emitted metadata into the loader heap.");
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: default options and indent options are distinct instances.</summary>
+        /// <summary>Pins the behavior expressed by the test name: default options and indent options are distinct instances.</summary>
         [Test]
         public void DefaultOptions_and_IndentOptions_are_distinct_instances()
         {
@@ -91,31 +91,31 @@ namespace MTConnect.NET_JSON_Tests.Regressions
                 "DefaultOptions (compact) and IndentOptions (pretty-printed) must be separate instances so WriteIndented differs.");
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: default options write indented is false.</summary>
+        /// <summary>Pins the behavior expressed by the test name: default options write indented is false.</summary>
         [Test]
         public void DefaultOptions_WriteIndented_is_false()
         {
             Assert.That(JsonFunctions.DefaultOptions.WriteIndented, Is.False);
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: indent options write indented is true.</summary>
+        /// <summary>Pins the behavior expressed by the test name: indent options write indented is true.</summary>
         [Test]
         public void IndentOptions_WriteIndented_is_true()
         {
             Assert.That(JsonFunctions.IndentOptions.WriteIndented, Is.True);
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: json functions holds a static readonly options field.</summary>
+        /// <summary>Pins the behavior expressed by the test name: json functions holds a static readonly options field.</summary>
         [Test]
         public void JsonFunctions_holds_a_static_readonly_options_field()
         {
             // Structural guard: at least one static readonly field of type
             // JsonSerializerOptions must exist on JsonFunctions so the
-            // shared instance survives across serialisation calls.
+            // shared instance survives across serialization calls.
             var fields = typeof(JsonFunctions).GetFields(BindingFlags.NonPublic | BindingFlags.Static);
             var optionsFields = System.Array.FindAll(fields, f => f.FieldType == typeof(JsonSerializerOptions) && f.IsInitOnly);
             Assert.That(optionsFields.Length, Is.GreaterThanOrEqualTo(2),
-                "JsonFunctions must declare shared static readonly JsonSerializerOptions fields (compact + indented) so the instances outlive each serialisation call.");
+                "JsonFunctions must declare shared static readonly JsonSerializerOptions fields (compact + indented) so the instances outlive each serialization call.");
         }
 
         /// <summary>
@@ -307,7 +307,7 @@ namespace MTConnect.NET_JSON_Tests.Regressions
 
         /// <summary>
         /// Null-input pin: every overload must swallow a null input and
-        /// return null / null / null — this is documented behaviour and
+        /// return null / null / null — this is documented behavior and
         /// the singleton refactor must preserve it.
         /// </summary>
         [Test]

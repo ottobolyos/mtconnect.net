@@ -28,7 +28,7 @@ namespace MTConnect
         // the ~3.3 MB/h RSS climb observed on DIME production hosts in
         // 2026-08. The cppagent-format assembly ships 25 Streams.Json
         // classes (2.5× the plain-JSON count), so the LCG cost per
-        // serialisation is proportionally larger. The instances below
+        // serialization is proportionally larger. The instances below
         // are created once and reused; JsonSerializerOptions is
         // thread-safe for read after its first (de)serialization, and
         // nothing in this file mutates them after construction.
