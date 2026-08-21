@@ -567,11 +567,12 @@ jobs:
         run: |
           diag_pattern='\b(error|warning)[[:space:]]+[A-Za-z]+[0-9]+'
           diag_total=$(grep -cE "$diag_pattern" pack.log 2>/dev/null || echo 0)
+          diag_unique=$(grep -E "$diag_pattern" pack.log 2>/dev/null | sort -u | wc -l)
           echo "### Release-pack diagnostics" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$diag_total" -gt 100 ]; then
-            echo "_Showing first 100 unique of ${diag_total} matching lines._" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$diag_total" -gt 0 ]; then
-            echo "_${diag_total} matching lines._" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$diag_unique" -gt 100 ]; then
+            echo "_Showing first 100 of ${diag_unique} unique diagnostics (${diag_total} total matching lines)._" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$diag_unique" -gt 0 ]; then
+            echo "_${diag_unique} unique diagnostics (${diag_total} total matching lines)._" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           grep -E "$diag_pattern" pack.log \

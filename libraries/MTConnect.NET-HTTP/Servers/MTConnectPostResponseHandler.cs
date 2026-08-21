@@ -161,9 +161,18 @@ namespace MTConnect.Servers
                     // "silent drop" without recompiling. Trace is BCL-only and
                     // costs nothing when no listener is attached; the original
                     // "swallow everything" semantics are preserved.
+                    //
+                    // Strip CR / LF from ex.Message before emitting so a nested
+                    // exception whose Message carries a newline cannot split
+                    // the trace line and forge a second-record entry when a
+                    // TextWriterTraceListener / FileLogTraceListener is wired
+                    // — OWASP A09 log-format-injection defence.
+                    var safeMessage = ex.Message == null
+                        ? string.Empty
+                        : ex.Message.Replace('\r', ' ').Replace('\n', ' ');
                     System.Diagnostics.Trace.WriteLine(
                         $"MTConnectPostResponseHandler.ReadRequestBytes swallowed "
-                        + $"{ex.GetType().FullName}: {ex.Message}");
+                        + $"{ex.GetType().FullName}: {safeMessage}");
                 }
             }
 
