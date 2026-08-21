@@ -189,6 +189,72 @@ namespace MTConnect
         }
 
         [Test]
+        public void Auto_derived_label_carries_the_auto_derived_suffix_on_stdout()
+        {
+            // Label-lie guard positive branch (F-IMP cycle 4): when the
+            // Compat label is genuinely auto-derived (no explicit
+            // --compat-version-label passed, zero-config prev-XMI resolved),
+            // the stdout `Label:` line must carry the "(auto-derived)"
+            // suffix so the operator sees at a glance which resolution
+            // strategy the CLI took. The `compatLabelIsAutoDerived` bool
+            // in Program.cs is TRUE on this branch.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("label-auto-derived-suffix");
+            WriteSyntheticVersionsCs(scratch);
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            File.Copy(realXmi, Path.Combine(cacheDir, "MTConnectSysMLModel_v2.7.xml"));
+
+            var (exitCode, stdout, stderr) = RunAutoDerive(realXmi, scratch);
+            Assert.That(exitCode, Is.Zero, $"stdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stdout, Does.Contain("Label:  v2_7 (auto-derived)"),
+                "Auto-derived label must be announced with the \"(auto-derived)\" suffix — "
+                + "positive branch of the compatLabelIsAutoDerived ternary in Program.cs.");
+        }
+
+        [Test]
+        public void Explicit_label_alongside_zero_config_prev_xmi_does_not_get_auto_derived_suffix()
+        {
+            // Label-lie guard negative branch (F-IMP cycle 4): the
+            // operator can pass an explicit --compat-version-label
+            // ALONGSIDE the zero-config prev-XMI path. The explicit label
+            // wins the `??=` default; annotating it "(auto-derived)"
+            // would be a lie. Pre-fix, the stdout unconditionally
+            // suffixed "(auto-derived)" whenever the delta mode
+            // announcement fired without --previous-xmi; the fix
+            // introduced a `compatLabelIsAutoDerived` bool so only the
+            // genuinely auto-derived branch appends the suffix.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("label-explicit-no-suffix");
+            WriteSyntheticVersionsCs(scratch);
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            File.Copy(realXmi, Path.Combine(cacheDir, "MTConnectSysMLModel_v2.7.xml"));
+
+            const string explicitLabel = "Custom-Release-Label";
+            var (exitCode, stdout, stderr) = RunGenerator(scratch,
+                "--new-xmi", realXmi,
+                "--output", scratch,
+                "--compat-version-label", explicitLabel);
+
+            Assert.That(exitCode, Is.Zero, $"stdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stdout, Does.Contain($"Label:  {explicitLabel}"),
+                "The explicit --compat-version-label must appear on the Label: line.");
+            Assert.That(stdout, Does.Not.Contain($"Label:  {explicitLabel} (auto-derived)"),
+                "The explicit label must NOT carry the \"(auto-derived)\" suffix — the "
+                + "operator supplied it themselves, so the suffix would misattribute "
+                + "authorship. This is the negative branch of the compatLabelIsAutoDerived "
+                + "ternary and the direct pin for the cycle-4 label-lie fix.");
+            Assert.That(stdout, Does.Contain("Mode:   delta (zero-config)"),
+                "The zero-config delta path must still fire — the auto-derive resolver "
+                + "runs (the cache is resolved), only the label default is bypassed.");
+        }
+
+        [Test]
         public void Explicit_previous_xmi_wins_over_auto_derive()
         {
             var repoRoot = FindRepoRoot();

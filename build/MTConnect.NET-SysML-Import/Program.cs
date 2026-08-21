@@ -1,3 +1,4 @@
+using MTConnect.NET_SysML_Import.Internal;
 using MTConnect.SysML;
 using MTConnect.SysML.CSharp;
 using MTConnect.SysML.Json_cppagent;
@@ -375,7 +376,7 @@ static Version ReadMTConnectVersionsMax(string outputRoot)
     // pinning the parser to the wrong version. Also removes `/* ... */` block
     // comments so a docblock example carrying the same convention shape does
     // not leak into the parse.
-    var source = StripCSharpComments(File.ReadAllText(versionsPath));
+    var source = SourceStripper.StripComments(File.ReadAllText(versionsPath));
 
     // Match `public static Version Max => VersionXY;` — the naming convention
     // is enforced by the hand-authored constant table above the Max property.
@@ -409,177 +410,6 @@ static Version ReadMTConnectVersionsMax(string outputRoot)
     var major = int.Parse(constMatch.Groups["major"].Value);
     var minor = int.Parse(constMatch.Groups["minor"].Value);
     return new Version(major, minor);
-}
-
-// Strips `//` line comments and `/* ... */` block comments from a C# source
-// string so the auto-derive regexes lock onto the LIVE declaration rather than
-// a commented-out convention-shape line. String and character literals are
-// walked verbatim so a `"// literal"` or `"/* literal */"` inside a string
-// does not get chewed up. Verbatim strings (`@"..."`) and interpolated
-// strings (`$"..."` / `$@"..."` / `@$"..."`) are handled explicitly. The
-// output preserves line numbers (comments are replaced by whitespace of the
-// same span) so downstream regex captures still report the original position.
-static string StripCSharpComments(string source)
-{
-    var sb = new StringBuilder(source.Length);
-    int i = 0;
-    while (i < source.Length)
-    {
-        char c = source[i];
-
-        // Line comment: `// ...` up to the next newline. Replace the comment
-        // span with spaces so column positions in the trailing line stay put.
-        if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
-        {
-            while (i < source.Length && source[i] != '\n')
-            {
-                sb.Append(' ');
-                i++;
-            }
-            continue;
-        }
-
-        // Block comment: `/* ... */`. Replace the entire span with spaces
-        // (and preserve embedded newlines verbatim so line numbers survive).
-        if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
-        {
-            sb.Append(' ');
-            sb.Append(' ');
-            i += 2;
-            while (i < source.Length)
-            {
-                if (source[i] == '*' && i + 1 < source.Length && source[i + 1] == '/')
-                {
-                    sb.Append(' ');
-                    sb.Append(' ');
-                    i += 2;
-                    break;
-                }
-                sb.Append(source[i] == '\n' ? '\n' : ' ');
-                i++;
-            }
-            continue;
-        }
-
-        // Verbatim / interpolated-verbatim string literal: `@"..."` /
-        // `$@"..."` / `@$"..."`. A doubled quote (`""`) is an escaped quote
-        // inside the literal; the terminator is a single unescaped quote.
-        if (c == '@' && i + 1 < source.Length && source[i + 1] == '"')
-        {
-            sb.Append(source, i, 2);
-            i += 2;
-            while (i < source.Length)
-            {
-                if (source[i] == '"')
-                {
-                    if (i + 1 < source.Length && source[i + 1] == '"')
-                    {
-                        sb.Append('"');
-                        sb.Append('"');
-                        i += 2;
-                        continue;
-                    }
-                    sb.Append('"');
-                    i++;
-                    break;
-                }
-                sb.Append(source[i]);
-                i++;
-            }
-            continue;
-        }
-        if (c == '$' && i + 1 < source.Length && source[i + 1] == '@'
-            && i + 2 < source.Length && source[i + 2] == '"')
-        {
-            sb.Append(source, i, 3);
-            i += 3;
-            while (i < source.Length)
-            {
-                if (source[i] == '"')
-                {
-                    if (i + 1 < source.Length && source[i + 1] == '"')
-                    {
-                        sb.Append('"');
-                        sb.Append('"');
-                        i += 2;
-                        continue;
-                    }
-                    sb.Append('"');
-                    i++;
-                    break;
-                }
-                sb.Append(source[i]);
-                i++;
-            }
-            continue;
-        }
-
-        // Regular / interpolated string literal: `"..."` or `$"..."`. A
-        // backslash escapes the next character (including `\"` and `\\`).
-        if (c == '"' || (c == '$' && i + 1 < source.Length && source[i + 1] == '"'))
-        {
-            if (c == '$')
-            {
-                sb.Append('$');
-                sb.Append('"');
-                i += 2;
-            }
-            else
-            {
-                sb.Append('"');
-                i++;
-            }
-            while (i < source.Length)
-            {
-                if (source[i] == '\\' && i + 1 < source.Length)
-                {
-                    sb.Append(source[i]);
-                    sb.Append(source[i + 1]);
-                    i += 2;
-                    continue;
-                }
-                if (source[i] == '"')
-                {
-                    sb.Append('"');
-                    i++;
-                    break;
-                }
-                sb.Append(source[i]);
-                i++;
-            }
-            continue;
-        }
-
-        // Character literal: `'x'` or `'\x'`. Same escape rule as strings.
-        if (c == '\'')
-        {
-            sb.Append('\'');
-            i++;
-            while (i < source.Length)
-            {
-                if (source[i] == '\\' && i + 1 < source.Length)
-                {
-                    sb.Append(source[i]);
-                    sb.Append(source[i + 1]);
-                    i += 2;
-                    continue;
-                }
-                if (source[i] == '\'')
-                {
-                    sb.Append('\'');
-                    i++;
-                    break;
-                }
-                sb.Append(source[i]);
-                i++;
-            }
-            continue;
-        }
-
-        sb.Append(c);
-        i++;
-    }
-    return sb.ToString();
 }
 
 // Runs `git -C <submoduleDir> describe --exact-match --tags HEAD` and returns
