@@ -102,7 +102,7 @@ Sibling job in `.github/workflows/dotnet.yml`. Runs on every push to `master` an
 
 **Purpose:** guard against the class of regressions the 2026-05-22 landing bypassed — a Debug-only CI floor let CS-family Release-only diagnostics ship as PR-level warnings that only surfaced during release packaging. The gate turns every such regression into a red PR check.
 
-**Exit contract:** must be RC=0 (zero errors, zero CS/NU/CA/SYSLIB diagnostics) to merge. The remaining MSB3277 assembly-conflict + NETSDK1138 EOL-TFM + transitive-package net461-compat build-summary warnings are pre-existing and are not tracked by this gate; the FLOOR is only against new code-level diagnostics.
+**Exit contract:** must be RC=0 (zero errors, zero MSBuild-shaped diagnostics — every `error XX0000` / `warning XX0000` family, e.g. CS / CA / NU / SYSLIB / MSB / NETSDK / IL / StyleCop / xUnit / NUnit / third-party analyzers) to merge. The remaining MSB3277 assembly-conflict + NETSDK1138 EOL-TFM + transitive-package net461-compat build-summary warnings are pre-existing and are not tracked by this gate; the FLOOR is only against new code-level diagnostics. When the pack fails, the `Surface pack errors` step renders a step-summary table of the unique matching lines (capped at 100 with an explicit truncation breadcrumb naming the full total).
 
 **Local repro** (matches CI):
 

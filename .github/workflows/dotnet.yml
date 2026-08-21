@@ -546,21 +546,35 @@ jobs:
       #
       # The regex matches any MSBuild-shaped diagnostic —
       # `error XX0000` / `warning XX0000` where XX is one or more
-      # capital letters (CS, CA, NU, SYSLIB, MSB, NETSDK, IL, XA,
-      # xUnit, NUnit, StyleCop, Roslyn analyzers, MTC-authored
-      # codes, third-party analyzer codes, ...). The prior
-      # `(CS|CA|NU|SYSLIB|MSB)` enumeration silently dropped every
-      # analyzer family outside that set — e.g. IL, NETSDK, NUnit
-      # analyzers, StyleCop, third-party CVE checkers — and produced
-      # empty summaries when the pack failed on any of them. The
-      # broadened pattern matches every MSBuild diagnostic shape so
-      # no failure family is masked.
+      # letters (CS, CA, NU, SYSLIB, MSB, NETSDK, IL, XA, StyleCop,
+      # Roslyn analyzers, and mixed-case analyzer families like
+      # `xUnit1004` / `nunit1001` that ship lowercase prefixes).
+      # The prior `(CS|CA|NU|SYSLIB|MSB)` enumeration silently
+      # dropped every family outside that set and produced empty
+      # summaries when the pack failed on any of them. The
+      # broadened pattern is a strict superset so no failure
+      # family is masked. `[A-Za-z]+[0-9]+` keeps the "letters
+      # then digits" shape so bare `warning:` prose lines and
+      # counter lines like `2 Warning(s)` are not matched.
+      #
+      # The `head -100` cap is a paste-into-summary safety valve;
+      # when it triggers, a `showing 100 of N` breadcrumb makes
+      # the truncation explicit so a maintainer triaging a
+      # summary-visible slice knows the full failure set is
+      # larger than what is rendered.
       - name: Surface pack errors (if any)
         if: failure()
         run: |
+          diag_pattern='\b(error|warning)[[:space:]]+[A-Za-z]+[0-9]+'
+          diag_total=$(grep -cE "$diag_pattern" pack.log 2>/dev/null || echo 0)
           echo "### Release-pack diagnostics" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$diag_total" -gt 100 ]; then
+            echo "_Showing first 100 unique of ${diag_total} matching lines._" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$diag_total" -gt 0 ]; then
+            echo "_${diag_total} matching lines._" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -E '\b(error|warning)[[:space:]]+[A-Z]+[0-9]+' pack.log \
+          grep -E "$diag_pattern" pack.log \
             | sort -u | head -100 >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
         shell: bash
