@@ -55,9 +55,16 @@ namespace MTConnect
             // only bootstrapped the shared reflection resolver — it
             // never named a concrete MTConnect type, so the cold LCG
             // emit for JsonStreamsResponseDocument /
-            // JsonAssetsResponseDocument / JsonDevicesResponseDocument
-            // still fell on the first user-facing request. The typed
-            // calls below fix that.
+            // JsonAssetsResponseDocument / JsonDevicesResponseDocument /
+            // ErrorResponseDocument still fell on the first user-facing
+            // request. The typed calls below fix that.
+            // ErrorResponseDocument (from MTConnect.Errors) is the
+            // surrogate-less envelope written directly by
+            // JsonHttpResponseDocumentFormatter.Format(IErrorResponseDocument);
+            // its cold LCG emit would otherwise hit on the first /probe
+            // error, /current parse failure, or unsupported device
+            // response — request paths that are already the symptom,
+            // not the happy path we want to pay reflection cost on top of.
             //
             // Order matters: the warm-up must run BEFORE MakeReadOnly,
             // because MakeReadOnly(populateMissingResolver: false)
@@ -93,11 +100,15 @@ namespace MTConnect
         // All three cppagent response envelopes expose public
         // parameterless constructors for JSON deserialization, so the
         // warm-up just news each one up and hands it to Serialize.
+        // ErrorResponseDocument (from MTConnect.Errors) is the fourth
+        // top-level envelope — no cppagent-specific surrogate, written
+        // by the formatter's IErrorResponseDocument overload directly.
         private static void WarmReachableGraph(JsonSerializerOptions options)
         {
             JsonSerializer.Serialize(new Streams.Json.JsonStreamsResponseDocument(), options);
             JsonSerializer.Serialize(new Assets.Json.JsonAssetsResponseDocument(), options);
             JsonSerializer.Serialize(new Devices.Json.JsonDevicesResponseDocument(), options);
+            JsonSerializer.Serialize(new Errors.ErrorResponseDocument(), options);
         }
 #endif
 
@@ -196,6 +207,20 @@ namespace MTConnect
         /// the instance is not statically frozen but callers must still
         /// treat it as immutable — mutating it silently corrupts every
         /// other in-process serializer that shares the singleton.
+        /// <para/>
+        /// Why the invariant matters: every mutation of a
+        /// <see cref="JsonSerializerOptions"/> instance that has already
+        /// been used forces System.Text.Json to rebuild its serialization
+        /// metadata cache, which re-emits reflection-based property
+        /// accessors as <see cref="System.Reflection.Emit.DynamicMethod"/>s
+        /// into the runtime's LCG (lightweight code generation) loader
+        /// heaps. Those heaps are never reclaimed by the GC — every
+        /// mutated-then-reused options object leaks the emit permanently.
+        /// A peer measured this class of misuse at +3.2–3.8 MB/h RSS in
+        /// production; the cppagent assembly ships 25 Streams.Json
+        /// classes (2.5× the plain-JSON count), so the per-mutation LCG
+        /// cost here is proportionally larger and the frozen singleton
+        /// pays back correspondingly more.
         /// </remarks>
         public static JsonSerializerOptions DefaultOptions => _defaultOptions;
 
@@ -214,6 +239,15 @@ namespace MTConnect
         /// the instance is not statically frozen but callers must still
         /// treat it as immutable — mutating it silently corrupts every
         /// other in-process serializer that shares the singleton.
+        /// <para/>
+        /// Why the invariant matters: same reflection-emit / LCG
+        /// loader-heap accumulation as documented on
+        /// <see cref="DefaultOptions"/>. Every per-call mutation of this
+        /// shared instance re-emits property-accessor
+        /// <see cref="System.Reflection.Emit.DynamicMethod"/>s into a
+        /// heap the GC cannot free — the mechanism behind the peer's
+        /// production +3.2–3.8 MB/h RSS climb before the singleton was
+        /// frozen.
         /// </remarks>
         public static JsonSerializerOptions IndentOptions => _indentOptions;
 

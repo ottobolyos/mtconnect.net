@@ -378,6 +378,36 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
                 "The warmed-and-frozen singleton must still emit real property data — a resolver-less frozen options would either throw or emit empty output.");
             Assert.That(indented, Does.Contain("\"Name\""));
         }
+
+        /// <summary>
+        /// Warm-up coverage pin (net8+) — <c>MTConnect.Errors.ErrorResponseDocument</c>
+        /// is the fourth top-level response envelope written directly by
+        /// <c>JsonHttpResponseDocumentFormatter.Format(IErrorResponseDocument, ...)</c>
+        /// without a cppagent-specific surrogate. The static-ctor
+        /// <c>WarmReachableGraph</c> pass must serialize an instance of it
+        /// against both option singletons BEFORE
+        /// <c>MakeReadOnly(populateMissingResolver: false)</c> — otherwise the
+        /// first error response (a /probe failure, unsupported device request,
+        /// or parse error) would pay a cold LCG DynamicMethod emit against
+        /// a frozen, resolver-less options and throw
+        /// <see cref="System.NotSupportedException"/>. Serializing a fresh
+        /// <see cref="MTConnect.Errors.ErrorResponseDocument"/> here reproduces
+        /// exactly that first-error path against the shared singletons; a
+        /// regression that dropped the Error warm-up would surface as a
+        /// NotSupportedException on this test.
+        /// </summary>
+        [Test]
+        public void Frozen_singleton_can_serialize_ErrorResponseDocument_proving_Error_warm_up_ran()
+        {
+            var document = new MTConnect.Errors.ErrorResponseDocument();
+
+            Assert.DoesNotThrow(
+                () => JsonSerializer.Serialize(document, JsonFunctions.DefaultOptions),
+                "Frozen DefaultOptions must have ErrorResponseDocument in its warmed TypeInfoResolver — a regression that removed the Error warm-up would surface here as NotSupportedException on the first error response.");
+            Assert.DoesNotThrow(
+                () => JsonSerializer.Serialize(document, JsonFunctions.IndentOptions),
+                "Frozen IndentOptions mirror — same Error warm-up invariant as DefaultOptions.");
+        }
 #endif
     }
 }
