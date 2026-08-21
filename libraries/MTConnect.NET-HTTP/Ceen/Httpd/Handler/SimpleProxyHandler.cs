@@ -66,7 +66,17 @@ namespace Ceen.Httpd.Handler
             wr.Method = context.Request.Method;
             if (context.Request.ContentLength > 0)
                 using (var rs = await wr.GetRequestStreamAsync())
-                    await context.Request.Body.CopyToAsync(rs);
+                    // Same bug class as MTConnectPostResponseHandler.ReadRequestBytes
+                    // (dime F-IMP-001): a request-body drain must honour the outer
+                    // cancellation token so a client abort short-circuits the copy
+                    // rather than reading the full body into the proxied upstream.
+                    // Uses the (Stream, int bufferSize, CancellationToken) overload
+                    // (universal since .NET 4.5); the 2-arg (Stream, CancellationToken)
+                    // shape is netstandard2.1 / net5+ only and cannot ship on the
+                    // library's net4x / netstandard2.0 targets. The 81920 buffer
+                    // matches the .NET runtime default for the tokenless
+                    // CopyToAsync overload so throughput is unchanged.
+                    await context.Request.Body.CopyToAsync(rs, 81920, cancellationToken);
 
             using (var res = await GetResponseWithoutExceptionAsync(wr))
             {
