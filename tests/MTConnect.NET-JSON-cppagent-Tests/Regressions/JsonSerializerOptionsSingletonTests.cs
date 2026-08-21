@@ -14,7 +14,7 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
 {
     /// <summary>
     /// Regression pin for the DIME-connector native-heap leak (peer
-    /// diagnosis dated 2026-08-21). This is the cppagent-flavoured
+    /// diagnosis dated 2026-08-21). This is the cppagent-flavored
     /// mirror of the same guard applied to
     /// <c>MTConnect.NET-JSON/JsonFunctions.cs</c>. The two files ship
     /// independent copies of the same option-preset surface, so both
@@ -108,7 +108,7 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
         }
 
         /// <summary>
-        /// Thread-safety pin — cppagent flavour. The cppagent assembly
+        /// Thread-safety pin — cppagent flavor. The cppagent assembly
         /// ships 25 Streams.Json classes vs 10 in the plain-JSON assembly,
         /// so the LCG cost per serialization is proportionally larger;
         /// the concurrency pin runs on the exact JsonFunctions surface

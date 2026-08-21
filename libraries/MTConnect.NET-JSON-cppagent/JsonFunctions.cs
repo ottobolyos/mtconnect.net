@@ -116,7 +116,7 @@ namespace MTConnect
         /// a per-call converter forces a private options instance. Every
         /// call allocates a new object and re-emits the STJ reflection
         /// metadata cache for the reachable type graph — the very cost
-        /// the singletons exist to amortise — so it MUST NOT be invoked
+        /// the singletons exist to amortize — so it MUST NOT be invoked
         /// on any hot-path serialization site.
         /// </remarks>
         /// <param name="indented">When true, sets <c>WriteIndented = true</c>; otherwise compact JSON.</param>
@@ -153,7 +153,7 @@ namespace MTConnect
         /// and returns it. This branch pays the full reflection-emit
         /// cost per call and is NOT thread-safe under simultaneous cold
         /// callers because the fresh options is neither shared nor
-        /// synchronised — each call allocates and mutates its own
+        /// synchronized — each call allocates and mutates its own
         /// object, so per-call concurrent use is safe; multiple callers
         /// sharing one converter instance is safe iff the converter
         /// itself is thread-safe. The branch exists solely to preserve
