@@ -1,7 +1,6 @@
 // Copyright (c) 2024 TrakHound Inc., All Rights Reserved.
 // TrakHound Inc. licenses this file to you under the MIT license.
 
-using System;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -127,7 +126,13 @@ namespace MTConnect
                 {
                     Header = new Headers.MTConnectErrorHeader(),
                     Errors = new[] { new Errors.Error() },
-                    Version = new Version(2, 5)
+                    // Any non-null concrete Version warms the
+                    // System.Version accessors identically; using the
+                    // repo's canonical constant instead of a magic
+                    // `new Version(2, 5)` tuple keeps the warm-up
+                    // aligned with the rest of the codebase's
+                    // MTConnectVersion sourcing (F-CR-C6-001).
+                    Version = MTConnectVersions.Version25
                 },
                 options);
         }
