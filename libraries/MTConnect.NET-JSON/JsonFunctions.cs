@@ -64,6 +64,25 @@ namespace MTConnect
 #endif
         }
 
+        /// <summary>
+        /// Builds a fresh <see cref="JsonSerializerOptions"/> instance
+        /// with the MTConnect option preset (compact / indented per
+        /// <paramref name="indented"/>, default-value omission on net5+,
+        /// number-from-string reading on net5+, case-insensitive property
+        /// lookup, 1000-deep recursion limit).
+        /// </summary>
+        /// <remarks>
+        /// This helper is intended for two callers only: (1) the
+        /// static-init assignments that construct the shared
+        /// <c>_defaultOptions</c> and <c>_indentOptions</c> singletons,
+        /// and (2) the cold-path branch of <see cref="GetOptions"/> when
+        /// a per-call converter forces a private options instance. Every
+        /// call allocates a new object and re-emits the STJ reflection
+        /// metadata cache for the reachable type graph — the very cost
+        /// the singletons exist to amortise — so it MUST NOT be invoked
+        /// on any hot-path serialization site.
+        /// </remarks>
+        /// <param name="indented">When true, sets <c>WriteIndented = true</c>; otherwise compact JSON.</param>
         private static JsonSerializerOptions CreateOptions(bool indented)
         {
             return new JsonSerializerOptions
@@ -78,6 +97,34 @@ namespace MTConnect
             };
         }
 
+        /// <summary>
+        /// Resolves the <see cref="JsonSerializerOptions"/> instance
+        /// used by <see cref="Convert(object, JsonConverter, bool)"/>,
+        /// <see cref="ConvertBytes"/>, and <see cref="ConvertStream"/>
+        /// for a given per-call converter + indentation combination.
+        /// </summary>
+        /// <remarks>
+        /// Hot path (<paramref name="converter"/> is null, which is
+        /// every in-tree caller): returns the shared frozen singleton
+        /// (<c>_defaultOptions</c> or <c>_indentOptions</c>) so STJ
+        /// reuses its metadata cache instead of re-emitting property
+        /// accessors on every call.
+        /// <para/>
+        /// Cold path (<paramref name="converter"/> is non-null):
+        /// allocates a fresh <see cref="JsonSerializerOptions"/> via
+        /// <see cref="CreateOptions"/>, appends the caller's converter,
+        /// and returns it. This branch pays the full reflection-emit
+        /// cost per call and is NOT thread-safe under simultaneous cold
+        /// callers because the fresh options is neither shared nor
+        /// synchronised — each call allocates and mutates its own
+        /// object, so per-call concurrent use is safe; multiple callers
+        /// sharing one converter instance is safe iff the converter
+        /// itself is thread-safe. The branch exists solely to preserve
+        /// the public API contract for external consumers that pass a
+        /// per-call converter.
+        /// </remarks>
+        /// <param name="converter">Optional caller-supplied converter. When non-null forces the cold path.</param>
+        /// <param name="indented">Selects the compact or indented preset.</param>
         private static JsonSerializerOptions GetOptions(JsonConverter converter, bool indented)
         {
             // Hot path: no per-call converter, hand back the shared
