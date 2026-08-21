@@ -46,19 +46,32 @@ Each `/tmp/sysml-vX.Y/MTConnectSysMLModel.xml` can then be passed to a separate 
 ### 2. Run the importer
 
 ```bash
-# From the repo root, after the submodule is checked out:
+# From the repo root, after the submodule is checked out. Zero-config: the
+# importer auto-derives PREV_VERSION from MTConnectVersions.Max and resolves
+# the prior-version XMI automatically, so the common case is a single-flag
+# invocation.
 dotnet run --project build/MTConnect.NET-SysML-Import \
-    -- --xmi build/sysml-model/MTConnectSysMLModel.xml \
+    -- --new-xmi build/sysml-model/MTConnectSysMLModel.xml \
        --output "$(pwd)"
+
+# Force full regeneration (skip both delta paths):
+dotnet run --project build/MTConnect.NET-SysML-Import \
+    -- --new-xmi build/sysml-model/MTConnectSysMLModel.xml \
+       --output "$(pwd)" \
+       --full-tree
 ```
 
 If running against a side worktree (for multi-version regens):
 
 ```bash
 dotnet run --project build/MTConnect.NET-SysML-Import \
-    -- --xmi /tmp/sysml-v2.5/MTConnectSysMLModel.xml \
-       --output "$(pwd)"
+    -- --new-xmi /tmp/sysml-v2.5/MTConnectSysMLModel.xml \
+       --output "$(pwd)" \
+       --full-tree
 ```
+
+The `--xmi` flag from pre-#408 invocations is still accepted as a legacy alias
+for `--new-xmi`; new call sites should prefer `--new-xmi`.
 
 ### 3. Inspect + commit
 
@@ -79,25 +92,43 @@ Split the regen into per-target commits so reviewers can audit each layer indepe
 
 | Flag | Required | Default | Purpose |
 |---|---|---|---|
-| `--xmi <path>` | Yes | — | Path to the SysML XMI file to consume. |
+| `--new-xmi <path>` | Yes | — | Path to the new-version SysML XMI to consume. Preferred spelling from task #408 onwards. |
+| `--xmi <path>` | — | — | Legacy alias for `--new-xmi`. Kept for backwards compatibility with pre-#408 callers; new invocations should prefer `--new-xmi`. |
 | `--output <path>` | Yes | — | Repository root. Each renderer writes into its own `libraries/<LibraryName>/` subtree under this root. |
-| `--previous-xmi <path>` | No | not set | Opt-in delta-driven mode. When supplied, the generator renders both XMIs to isolated scratch directories, diffs the emitted trees at the file level, and writes only the changed / added files into `--output` — plus a per-library `Compat/<label>.g.cs` file concentrating every unchanged type (plan D4). Files present in `--previous-xmi`'s tree but absent from `--xmi`'s tree (REMOVED types) are **deleted** from the output tree. Files concentrated into `Compat/<label>.g.cs` (UNCHANGED types) are also deleted from their individual `.g.cs` paths — the Compat file becomes the sole namespace host to avoid CS0101 duplicate-type collisions when `--output` points at a repo already carrying a full committed `.g.cs` tree. |
-| `--compat-version-label <label>` | No | `Previous` | Label used for the `Compat/<label>.g.cs` file name in delta mode. Must match `^[A-Za-z0-9_\-][A-Za-z0-9_\-.]*$`, ≤ 64 chars, no leading dot — hostile inputs like `../../etc/passwd` reject at exit 2. Ignored unless `--previous-xmi` is supplied. |
+| `--previous-xmi <path>` | No | auto-derived | Explicit override for the prior-version XMI in delta mode. When supplied, skips the zero-config auto-derive step and uses this file as the previous-version XMI. Typical use cases: cross-version audit runs, regenerating against a historical XMI snapshot, and version-bumps that skip a version (where `MTConnectVersions.Max` does not match the intended `PREV_VERSION`). Files present in `--previous-xmi`'s tree but absent from `--new-xmi`'s tree (REMOVED types) are **deleted** from the output tree. Files concentrated into `Compat/<label>.g.cs` (UNCHANGED types) are also deleted from their individual `.g.cs` paths — the Compat file becomes the sole namespace host to avoid CS0101 duplicate-type collisions when `--output` points at a repo already carrying a full committed `.g.cs` tree. |
+| `--compat-version-label <label>` | No | `v${PREV_XY_UNDERSCORE}` (auto-derived) or `Previous` (explicit-override fallback) | Label used for the `Compat/<label>.g.cs` file name in delta mode. In zero-config mode the label auto-derives from `MTConnectVersions.Max` as `v${X}_${Y}` (e.g. `v2_7`); with an explicit `--previous-xmi` the legacy `Previous` default applies. Must match `^[A-Za-z0-9_\-][A-Za-z0-9_\-.]*$`, ≤ 64 chars, no leading dot — hostile inputs like `../../etc/passwd` reject at exit 2. Ignored under `--full-tree`. |
+| `--full-tree` | No | delta by default | Explicit opt-in for the full-regeneration path. Disables both the zero-config auto-derive delta and the `--previous-xmi` override; every emitted `.g.cs` re-lands under its normal path. |
 | `--json-dump <path>` | No | not written | If set, dumps the parsed `MTConnectModel` as JSON. Useful for debugging. |
 | `--help`, `-h` | — | — | Print usage and exit. |
 
-`--xmi` and `--output` are mandatory. Running with no arguments exits with `error: --xmi <path> is required.` (exit code 2) and prints help.
+`--new-xmi` (or `--xmi`) and `--output` are mandatory. Running with no arguments exits with `error: --new-xmi <path> is required (legacy alias --xmi is still accepted).` (exit code 2) and prints help.
 
-### Delta mode (`--previous-xmi`)
+### Zero-config delta mode (default from task #408)
 
-Delta mode is the incremental-emit workflow for spec-version bumps: it emits only the code that changed vs. the prior spec, and concentrates every byte-identical file into a single `Compat/<label>.g.cs` per library. This keeps a spec-bump diff scoped to the types the spec actually changed.
+When neither `--previous-xmi` nor `--full-tree` is supplied, the importer parses `MTConnectVersions.Max` from `libraries/MTConnect.NET-Common/MTConnectVersions.cs` under `--output` and resolves the prior-version XMI internally, in this order:
+
+1. **Strategy B (primary)** — `build/.cache/sysml-prev/MTConnectSysMLModel_v${PREV_VERSION}.xml`, populated per Phase 3.2 of the version-bump runbook (`docs/testing/vX-Y.md`).
+2. **Strategy A (fallback)** — `build/sysml-model/MTConnectSysMLModel.xml`, gated on `git -C build/sysml-model describe --exact-match --tags HEAD` returning `v${PREV_VERSION}` exactly. Covers the dev-loop case where the operator has not yet promoted the submodule tip past the prior-version tag.
+3. **Strategy C (fail-hard)** — neither resolves. Exits with `error: PREV_VERSION auto-derivation from MTConnectVersions.Max = ${PREV_VERSION} failed. …` on stderr + exit code 1, naming both probed paths and directing the operator at `--previous-xmi` (explicit override) or `--full-tree` (delta-disable escape hatch).
+
+The zero-config default keeps a Phase 3 version-bump invocation single-flag:
 
 ```bash
 dotnet run --project build/MTConnect.NET-SysML-Import \
-    -- --xmi  /tmp/mtconnect-sysml/v2.8/MTConnectSysMLModel.xml \
-       --previous-xmi  /tmp/mtconnect-sysml/v2.7/MTConnectSysMLModel.xml \
-       --compat-version-label  v2_7 \
-       --output  "$(pwd)"
+    -- --new-xmi  build/sysml-model/MTConnectSysMLModel.xml \
+       --output   "$(pwd)"
+```
+
+### Delta mode with explicit `--previous-xmi`
+
+The explicit-override path is for the exceptional cases where `MTConnectVersions.Max` does not name the intended `PREV_VERSION` (cross-version audit, regen against a historical XMI snapshot, or a spec bump that skips a version).
+
+```bash
+dotnet run --project build/MTConnect.NET-SysML-Import \
+    -- --new-xmi        /tmp/mtconnect-sysml/v2.8/MTConnectSysMLModel.xml \
+       --previous-xmi   /tmp/mtconnect-sysml/v2.5/MTConnectSysMLModel.xml \
+       --compat-version-label  v2_5 \
+       --output         "$(pwd)"
 ```
 
 Emission partitions per file:
@@ -150,7 +181,7 @@ public static readonly Version Version28 = new Version(2, 8);   // add the const
 git -C /tmp/mtconnect-sysml fetch --tags
 git -C /tmp/mtconnect-sysml checkout v2.8
 dotnet run --project build/MTConnect.NET-SysML-Import \
-    -- --xmi /tmp/mtconnect-sysml/MTConnectSysMLModel.xml \
+    -- --new-xmi /tmp/mtconnect-sysml/MTConnectSysMLModel.xml \
        --output "$(pwd)"
 ```
 
