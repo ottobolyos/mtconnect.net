@@ -357,14 +357,20 @@ namespace MTConnect.Configurations
         /// <see cref="ArgumentException"/> like the other three loaders. Sharing
         /// the same body by construction fixes the asymmetry forever.
         /// </summary>
-        /// <typeparam name="T">The concrete return type of the deserialiser call.</typeparam>
-        /// <param name="configurationPath">The resolved configuration path — used both in the surfaced <see cref="ArgumentException"/> message and in the generic-fall-through <see cref="Trace.TraceError(string)"/> line.</param>
-        /// <param name="deserialize">A closure that runs the deserialiser and returns the loaded configuration (or null when the source text was empty).</param>
-        private static T LoadWithTriage<T>(string configurationPath, Func<T> deserialize) where T : class
+        /// <typeparam name="T">The concrete return type of the deserialiser call — constrained to <see cref="AgentConfiguration"/> so the helper can set <see cref="AgentConfiguration.Path"/> and call <see cref="AgentConfiguration.Normalize"/> on the loaded instance.</typeparam>
+        /// <param name="configurationPath">The resolved configuration path — used both in the surfaced <see cref="ArgumentException"/> message, in the generic-fall-through <see cref="Trace.TraceError(string)"/> line, and stamped onto the loaded configuration's <see cref="AgentConfiguration.Path"/> property.</param>
+        /// <param name="deserialize">A closure that runs the deserialiser and returns the loaded configuration (or null when the source text was empty). The helper takes care of stamping <see cref="AgentConfiguration.Path"/> and invoking <see cref="AgentConfiguration.Normalize"/> on a non-null return, so the closure only needs to build its deserialiser options and return the deserialised value.</param>
+        private static T LoadWithTriage<T>(string configurationPath, Func<T> deserialize) where T : AgentConfiguration
         {
             try
             {
-                return deserialize();
+                var configuration = deserialize();
+                if (configuration != null)
+                {
+                    configuration.Path = configurationPath;
+                    configuration.Normalize();
+                }
+                return configuration;
             }
             catch (ArgumentOutOfRangeException ex)
             {
@@ -524,13 +530,7 @@ namespace MTConnect.Configurations
                         ReadCommentHandling = JsonCommentHandling.Skip
                     };
 
-                    var configuration = JsonSerializer.Deserialize<T>(text, options);
-                    if (configuration != null)
-                    {
-                        configuration.Path = configurationPath;
-                        configuration.Normalize();
-                    }
-                    return configuration;
+                    return JsonSerializer.Deserialize<T>(text, options);
                 });
             }
 
@@ -566,13 +566,7 @@ namespace MTConnect.Configurations
                         ReadCommentHandling = JsonCommentHandling.Skip
                     };
 
-                    var configuration = (AgentConfiguration)JsonSerializer.Deserialize(text, type, options);
-                    if (configuration != null)
-                    {
-                        configuration.Path = configurationPath;
-                        configuration.Normalize();
-                    }
-                    return configuration;
+                    return (AgentConfiguration)JsonSerializer.Deserialize(text, type, options);
                 });
             }
 
@@ -609,13 +603,7 @@ namespace MTConnect.Configurations
                         .IgnoreUnmatchedProperties()
                         .Build();
 
-                    var configuration = deserializer.Deserialize<T>(text);
-                    if (configuration != null)
-                    {
-                        configuration.Path = configurationPath;
-                        configuration.Normalize();
-                    }
-                    return configuration;
+                    return deserializer.Deserialize<T>(text);
                 });
             }
 
@@ -651,13 +639,7 @@ namespace MTConnect.Configurations
                         .IgnoreUnmatchedProperties()
                         .Build();
 
-                    var configuration = (AgentConfiguration)deserializer.Deserialize(text, type);
-                    if (configuration != null)
-                    {
-                        configuration.Path = configurationPath;
-                        configuration.Normalize();
-                    }
-                    return configuration;
+                    return (AgentConfiguration)deserializer.Deserialize(text, type);
                 });
             }
 
