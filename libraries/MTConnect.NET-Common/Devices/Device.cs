@@ -464,7 +464,7 @@ namespace MTConnect.Devices
             if (component == null) return;
             if (depth > MaxComponentWalkDepth)
             {
-                Trace.TraceWarning($"Device.RemoveComponent: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
+                Trace.TraceWarning($"Device.RemoveComponent[{Id}]: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
                 return;
             }
 
@@ -733,7 +733,7 @@ namespace MTConnect.Devices
             if (component == null) return;
             if (depth > MaxComponentWalkDepth)
             {
-                Trace.TraceWarning($"Device.RemoveComposition: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
+                Trace.TraceWarning($"Device.RemoveComposition[{Id}]: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
                 return;
             }
 
@@ -1135,7 +1135,7 @@ namespace MTConnect.Devices
             if (component == null) return;
             if (depth > MaxComponentWalkDepth)
             {
-                Trace.TraceWarning($"Device.RemoveDataItem: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
+                Trace.TraceWarning($"Device.RemoveDataItem[{Id}]: walk depth {MaxComponentWalkDepth} exceeded; possible cyclic Component graph");
                 return;
             }
 
