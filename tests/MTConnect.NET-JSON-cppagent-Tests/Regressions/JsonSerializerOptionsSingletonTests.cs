@@ -339,6 +339,43 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Regressions
                 () => JsonFunctions.IndentOptions.Converters.Add(new NoopConverter()),
                 "IndentOptions is a shared singleton and must be frozen on net8+ so a stray Converters.Add fails fast rather than silently mutating the process-wide instance.");
         }
+
+        /// <summary>
+        /// Warm-up-before-freeze ordering pin (net8+): the frozen singleton
+        /// must still be able to serialize a real typed payload, proving that
+        /// the static-ctor warm-up (<c>JsonSerializer.Serialize&lt;object&gt;(null, _defaultOptions)</c>)
+        /// ran BEFORE <c>MakeReadOnly(populateMissingResolver: false)</c>. If a
+        /// future refactor reordered the two calls — or removed the warm-up
+        /// entirely — the frozen, resolver-less options would throw
+        /// <see cref="System.NotSupportedException"/> on the first real-payload
+        /// Serialize. The invariant is documented in the JsonFunctions static
+        /// ctor comment ("Order matters: the warm-up must run BEFORE
+        /// MakeReadOnly"); this test names it as a regression pin.
+        /// <para/>
+        /// Calls <see cref="JsonSerializer.Serialize{TValue}(TValue, JsonSerializerOptions)"/>
+        /// directly rather than via <see cref="JsonFunctions.Convert"/> because
+        /// Convert's catch-all silently swallows serialization exceptions into
+        /// a null return — routing through it would degrade a diagnostic
+        /// "NotSupportedException at Serialize" into an opaque "Expected: not null".
+        /// </summary>
+        [Test]
+        public void Frozen_singleton_can_serialize_a_real_payload_proving_warm_up_ran_before_MakeReadOnly()
+        {
+            var payload = new SamplePayload();
+
+            string compact = string.Empty;
+            string indented = string.Empty;
+            Assert.DoesNotThrow(
+                () => compact = JsonSerializer.Serialize(payload, JsonFunctions.DefaultOptions),
+                "Frozen DefaultOptions must have a populated TypeInfoResolver — a static-ctor reorder that runs MakeReadOnly BEFORE the Serialize<object>(null, …) warm-up would surface here as NotSupportedException.");
+            Assert.DoesNotThrow(
+                () => indented = JsonSerializer.Serialize(payload, JsonFunctions.IndentOptions),
+                "Frozen IndentOptions must have a populated TypeInfoResolver — same warm-up-before-freeze invariant as DefaultOptions.");
+
+            Assert.That(compact, Does.Contain("\"Name\""),
+                "The warmed-and-frozen singleton must still emit real property data — a resolver-less frozen options would either throw or emit empty output.");
+            Assert.That(indented, Does.Contain("\"Name\""));
+        }
 #endif
     }
 }
