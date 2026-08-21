@@ -79,10 +79,12 @@ Configuration for an MTConnect Agent
 
 | Key | C# property | Type | Description |
 | --- | --- | --- | --- |
+| `allowEmptyResultForEnumEvents` | `AllowEmptyResultForEnumEvents` | `bool` | Gets or Sets whether an empty, null, or whitespace-only Result is preserved for Event DataItems whose Type has a controlled vocabulary (for example EXECUTION, CONTROLLER_MODE). Defaults to <c>false</c>, which coerces such Results to <c>UNAVAILABLE</c>. Numeric DataItems (all Samples, and the numeric-typed Events enumerated by the MTConnect Standard SysML) are always coerced regardless of this flag; free-form String Event DataItems (PROGRAM, MESSAGE, TOOL_ID, ASSET_CHANGED, and every other non-vocabulary Type) always preserve the empty Result. |
 | `assetBufferSize` | `AssetBufferSize` | `uint` | The maximum number of assets the agent can hold in its buffer |
 | `changeToken` | `ChangeToken` | `string` | An opaque token regenerated each time the configuration is saved, allowing consumers to detect that the configuration has changed. |
 | `convertUnits` | `ConvertUnits` | `bool` | Gets or Sets the default for Converting Units when adding Observations |
 | `defaultVersion` | `DefaultVersionValue` | `string` | The string form of <see cref="DefaultVersion"/> used for serialization; assigning a parseable version string updates <see cref="DefaultVersion"/>. |
+| `deviceValidationLevel` | `DeviceValidationLevel` | `DeviceValidationLevel` | Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict |
 | `enableAgentDevice` | `EnableAgentDevice` | `bool` | Gets or Sets whether the Agent Device is output |
 | `enableMetrics` | `EnableMetrics` | `bool` | Gets or Sets whether Metrics are captured (ex. ObserationUpdateRate, AssetUpdateRate) |
 | `enableValidation` | `EnableValidation` | `bool` | Gets or Sets whether validation information is output |
@@ -190,10 +192,12 @@ Configuration for an MTConnect Agent
 
 | Key | C# property | Type | Description |
 | --- | --- | --- | --- |
+| `allowEmptyResultForEnumEvents` | `AllowEmptyResultForEnumEvents` | `bool` | Gets whether an empty, null, or whitespace-only Result is preserved for Event DataItems whose Type has a controlled vocabulary (for example EXECUTION, CONTROLLER_MODE). When <c>false</c> (the default), such Results are coerced to <c>UNAVAILABLE</c> to satisfy the MTConnect Standard requirement that a controlled-vocabulary Event's Result be a member of the vocabulary. When <c>true</c>, the empty Result is published verbatim, which some implementations rely on for parity with adapters that emit empty values. Numeric DataItems (all Samples, and the numeric-typed Events enumerated by the SysML model) are always coerced regardless of this flag, per the Part 2 "Sample MUST always be reported in float" requirement. Free-form String Event DataItems (PROGRAM, MESSAGE, TOOL_ID, ASSET_CHANGED, and every other non-vocabulary Type) always preserve the empty Result. |
 | `assetBufferSize` | `AssetBufferSize` | `uint` | The maximum number of assets the agent can hold in its buffer |
 | `changeToken` | `ChangeToken` | `string` | An opaque token that changes whenever the underlying configuration source is reloaded, allowing consumers to detect that the configuration has been replaced. |
 | `convertUnits` | `ConvertUnits` | `bool` | Gets the default for Converting Units when adding Observations |
 | `defaultVersion` | `DefaultVersion` | `Version` | Gets the default MTConnect version to output response documents for. |
+| `deviceValidationLevel` | `DeviceValidationLevel` | `DeviceValidationLevel` | Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict |
 | `enableAgentDevice` | `EnableAgentDevice` | `bool` | Gets or Sets whether the Agent Device is output |
 | `enableMetrics` | `EnableMetrics` | `bool` | Gets whether Metrics are captured (ex. ObserationUpdateRate, AssetUpdateRate) |
 | `enableValidation` | `EnableValidation` | `bool` | Gets or Sets whether validation information is output |

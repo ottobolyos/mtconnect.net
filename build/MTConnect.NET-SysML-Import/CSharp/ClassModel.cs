@@ -49,7 +49,7 @@ namespace MTConnect.SysML.CSharp
                     {
                         var propertyValue = importProperty.GetValue(importModel);
 
-                        var exportProperty = exportProperties.FirstOrDefault(o => o.Name ==  importProperty.Name);
+                        var exportProperty = exportProperties.FirstOrDefault(o => o.Name == importProperty.Name);
                         if (exportProperty != null && exportProperty.PropertyType == importProperty.PropertyType)
                         {
                             exportProperty.SetValue(exportModel, propertyValue);
@@ -62,7 +62,7 @@ namespace MTConnect.SysML.CSharp
 
                         // Remove 'Enum' suffix
                         if (exportPropertyModel.DataType.EndsWith("Enum"))
-                        {   
+                        {
                             var suffix = "Enum";
                             if (exportPropertyModel.DataType.EndsWith(suffix)) exportPropertyModel.DataType = exportPropertyModel.DataType.Substring(0, exportPropertyModel.DataType.Length - suffix.Length);
                         }

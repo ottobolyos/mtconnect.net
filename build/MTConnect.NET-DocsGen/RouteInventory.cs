@@ -220,8 +220,8 @@ public static class RouteInventory
     // the *summary text* still flows from /// on the handler class.
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<EndpointParam>> CeenHandlerParameters
         = new Dictionary<string, IReadOnlyList<EndpointParam>>
-    {
-        ["MTConnectProbeResponseHandler"] = new EndpointParam[]
+        {
+            ["MTConnectProbeResponseHandler"] = new EndpointParam[]
         {
             new("deviceType", "Query", "string", null, "Optional device-type filter."),
             new("version", "Query", "string", null, "Target MTConnect Standard version of the response document."),
@@ -230,7 +230,7 @@ public static class RouteInventory
             new("indentOutput", "Query", "bool", null, "Pretty-print the response document."),
             new("outputComments", "Query", "bool", null, "Emit comments / annotations in the response document."),
         },
-        ["MTConnectCurrentResponseHandler"] = new EndpointParam[]
+            ["MTConnectCurrentResponseHandler"] = new EndpointParam[]
         {
             new("path", "Query", "string", null, "XPath that filters the data items included in the response."),
             new("at", "Query", "ulong", null, "Sequence number anchoring the snapshot."),
@@ -242,7 +242,7 @@ public static class RouteInventory
             new("indentOutput", "Query", "bool", null, "Pretty-print the response document."),
             new("outputComments", "Query", "bool", null, "Emit comments / annotations in the response document."),
         },
-        ["MTConnectSampleResponseHandler"] = new EndpointParam[]
+            ["MTConnectSampleResponseHandler"] = new EndpointParam[]
         {
             new("path", "Query", "string", null, "XPath that filters the data items included in the response."),
             new("from", "Query", "ulong", null, "Sequence number lower bound."),
@@ -256,7 +256,7 @@ public static class RouteInventory
             new("indentOutput", "Query", "bool", null, "Pretty-print the response document."),
             new("outputComments", "Query", "bool", null, "Emit comments / annotations in the response document."),
         },
-        ["MTConnectAssetsResponseHandler"] = new EndpointParam[]
+            ["MTConnectAssetsResponseHandler"] = new EndpointParam[]
         {
             new("type", "Query", "string", null, "Asset type filter (e.g. CuttingTool)."),
             new("removed", "Query", "bool", null, "Include removed assets when true."),
@@ -264,20 +264,20 @@ public static class RouteInventory
             new("documentFormat", "Query", "string", "xml", "Response document format."),
             new("indentOutput", "Query", "bool", null, "Pretty-print the response document."),
         },
-        ["MTConnectAssetResponseHandler"] = new EndpointParam[]
+            ["MTConnectAssetResponseHandler"] = new EndpointParam[]
         {
             new("assetId", "Route", "string", null, "Asset identifier captured from the trailing path segment."),
             new("documentFormat", "Query", "string", "xml", "Response document format."),
         },
-        ["MTConnectPutResponseHandler"] = new EndpointParam[]
+            ["MTConnectPutResponseHandler"] = new EndpointParam[]
         {
             new("(form / query)", "Body", "Dictionary<string,string>", null, "DataItemId=Value entries to enqueue as observations."),
         },
-        ["MTConnectPostResponseHandler"] = new EndpointParam[]
+            ["MTConnectPostResponseHandler"] = new EndpointParam[]
         {
             new("(body)", "Body", "string", null, "Asset document payload."),
         },
-    };
+        };
 
     // Cache of parsed /// summary text per handler-class file path, so
     // we only Roslyn-parse each file once even though several variables
