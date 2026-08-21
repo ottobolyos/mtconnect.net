@@ -45,14 +45,35 @@ namespace MTConnect.NET_Common_Tests.Http
             using var oneByteAtATime = new OneByteAtATimeStream(body);
 
             var handlerType = LoadHandlerType();
-            var method = handlerType.GetMethod(
+            // Prefer the current (Stream, CancellationToken) signature —
+            // the F-IMP-001 fix threads the token — and fall back to the
+            // pre-fix (Stream) shape for source-tree resilience. Both
+            // shapes are exercised on the happy-path body below.
+            var tokenMethod = handlerType.GetMethod(
                 "ReadRequestBytes",
-                BindingFlags.NonPublic | BindingFlags.Static)
-                ?? throw new InvalidOperationException(
-                    "MTConnectPostResponseHandler.ReadRequestBytes(Stream) not found via reflection.");
-
-            var taskObj = method.Invoke(null, new object?[] { oneByteAtATime })
-                ?? throw new InvalidOperationException("ReadRequestBytes returned null Task.");
+                BindingFlags.NonPublic | BindingFlags.Static,
+                binder: null,
+                types: new[] { typeof(Stream), typeof(CancellationToken) },
+                modifiers: null);
+            object taskObj;
+            if (tokenMethod != null)
+            {
+                taskObj = tokenMethod.Invoke(null, new object?[] { oneByteAtATime, CancellationToken.None })
+                    ?? throw new InvalidOperationException("ReadRequestBytes returned null Task.");
+            }
+            else
+            {
+                var legacyMethod = handlerType.GetMethod(
+                    "ReadRequestBytes",
+                    BindingFlags.NonPublic | BindingFlags.Static,
+                    binder: null,
+                    types: new[] { typeof(Stream) },
+                    modifiers: null)
+                    ?? throw new InvalidOperationException(
+                        "MTConnectPostResponseHandler.ReadRequestBytes not found via reflection.");
+                taskObj = legacyMethod.Invoke(null, new object?[] { oneByteAtATime })
+                    ?? throw new InvalidOperationException("ReadRequestBytes returned null Task.");
+            }
             var task = (Task<byte[]>)taskObj;
             var result = await task;
 

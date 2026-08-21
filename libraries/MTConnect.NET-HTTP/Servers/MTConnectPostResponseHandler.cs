@@ -40,7 +40,7 @@ namespace MTConnect.Servers
 
             if (httpRequest != null && httpRequest.Path != null && httpResponse != null)
             {
-                var requestBytes = await ReadRequestBytes(context.Request.Body);
+                var requestBytes = await ReadRequestBytes(context.Request.Body, cancellationToken);
                 if (!requestBytes.IsNullOrEmpty())
                 {
                     var urlSegments = GetUriSegments(httpRequest.Path);
@@ -97,7 +97,7 @@ namespace MTConnect.Servers
             return response;
         }
 
-        private static async Task<byte[]> ReadRequestBytes(Stream inputStream)
+        private static async Task<byte[]> ReadRequestBytes(Stream inputStream, CancellationToken cancellationToken)
         {
             if (inputStream != null)
             {
@@ -122,10 +122,17 @@ namespace MTConnect.Servers
                     // buffer throws EndOfStreamException (silently swallowed by the
                     // outer catch, dropping the request), and TrimEnd would corrupt
                     // any payload whose final legitimate byte is 0x00.
+                    //
+                    // Cancellation is threaded to every ReadAsync so a client
+                    // abort (Ceen surfaces it as the OnRequestReceived
+                    // cancellationToken parameter) short-circuits the accumulator
+                    // rather than draining the full 2 MB. Matches the sibling
+                    // LimitedBodyStream.DiscardAllAsync which likewise takes a
+                    // CancellationToken and forwards it to its ReadAsync loop.
                     var totalRead = 0;
                     while (totalRead < bytes.Length)
                     {
-                        var read = await inputStream.ReadAsync(bytes, totalRead, bytes.Length - totalRead);
+                        var read = await inputStream.ReadAsync(bytes, totalRead, bytes.Length - totalRead, cancellationToken);
                         if (read == 0) break;
                         totalRead += read;
                     }
@@ -134,6 +141,15 @@ namespace MTConnect.Servers
                     var result = new byte[totalRead];
                     Array.Copy(bytes, 0, result, 0, totalRead);
                     return result;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Caller-driven cancellation is a legitimate signal, not a
+                    // transport error. Propagate so the outer Ceen pipeline can
+                    // honour the abort — swallowing here would translate the
+                    // aborted request into a benign 404 / null-body response and
+                    // mask the abort from telemetry and the request lifecycle.
+                    throw;
                 }
                 catch { }
             }
