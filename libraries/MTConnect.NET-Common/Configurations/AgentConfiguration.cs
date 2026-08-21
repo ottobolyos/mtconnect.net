@@ -150,12 +150,28 @@ namespace MTConnect.Configurations
         /// Gets or Sets the default Device (MTConnectDevices) validation level. 0 = Ignore, 1 = Warning, 2 = Remove, 3 = Strict.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// When a configuration file omits this key the loader mirrors <see cref="InputValidationLevel"/>
         /// onto Device validation, preserving pre-v7 behaviour for consumers that only knew the single
         /// <see cref="InputValidationLevel"/> knob. Setting this property — either programmatically or via a
         /// key present in the source document — latches the value as explicit (the nullable backing field
         /// becomes non-null) and disables the mirror on the next <see cref="Normalize"/>. An assignment
         /// whose ordinal is not a defined enum arm raises <see cref="ArgumentOutOfRangeException"/>.
+        /// </para>
+        /// <para>
+        /// <b>Save-latches-mirror behaviour.</b> The getter self-mirrors from
+        /// <see cref="InputValidationLevel"/> when the backing field is still null (i.e. this key was
+        /// never explicitly set), and JSON/YAML serialisers observe the getter's return value — not the
+        /// nullable backing field. That means <see cref="SaveJson"/> / <see cref="SaveYaml"/> on a
+        /// configuration whose DVL was never explicitly set writes the mirrored ordinal into the
+        /// document. On the next <see cref="Read{T}"/> the deserialiser hits an explicit key and
+        /// latches it, converting the previously implicit mirror into an EXPLICIT stored value. Runtime
+        /// <see cref="InputValidationLevel"/> changes after that reload therefore do NOT re-mirror onto
+        /// DVL — the operator must clear DVL back to implicit (currently only possible via a fresh
+        /// construction) or set DVL explicitly. A caller that mutates IVL after a save→reload round-trip
+        /// and expects DVL to follow should call <see cref="Normalize"/> explicitly on a freshly-loaded
+        /// configuration BEFORE any programmatic IVL edit.
+        /// </para>
         /// </remarks>
         [JsonPropertyName("deviceValidationLevel")]
         public DeviceValidationLevel DeviceValidationLevel
