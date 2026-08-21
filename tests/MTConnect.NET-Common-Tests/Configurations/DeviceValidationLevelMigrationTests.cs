@@ -848,16 +848,22 @@ namespace MTConnect.Tests.Common.Configurations
 
         /// <summary>
         /// Pins the shared <c>LoadWithTriage&lt;T&gt;</c> helper's
-        /// <c>where T : class</c> generic constraint — the M2-C2 refactor relies
-        /// on returning null on the generic fall-through, which requires a
-        /// reference-type constraint. A regression that dropped the constraint
-        /// (or widened it to a value-type-permissive shape) would silently
-        /// compile-error inside the helper body on the <c>return null</c> line;
-        /// pinning the constraint via reflection catches the change at test time
+        /// <c>where T : AgentConfiguration</c> generic constraint — the M2-C2
+        /// refactor relies on returning null on the generic fall-through
+        /// (requires a reference-type constraint, which the AgentConfiguration
+        /// base-type constraint implies), and cycle-3 F-SIMP-C3-001 tightened
+        /// the constraint from the original <c>where T : class</c> so the helper
+        /// itself can stamp <see cref="AgentConfiguration.Path"/> and invoke
+        /// <see cref="AgentConfiguration.Normalize"/> on the loaded instance
+        /// without duplicating that tail in every loader closure. A regression
+        /// that widened the constraint back to <c>class</c> would compile-error
+        /// inside the helper body on the Path/Normalize lines; a regression
+        /// that dropped it entirely would compile-error on <c>return null</c>.
+        /// Pinning both signals via reflection catches the change at test time
         /// rather than through a downstream build break.
         /// </summary>
         [Test]
-        public void LoadWithTriage_Has_Class_Constraint_On_T_Parameter()
+        public void LoadWithTriage_Has_AgentConfiguration_Constraint_On_T_Parameter()
         {
             var method = typeof(AgentConfiguration).GetMethod(
                 "LoadWithTriage",
@@ -869,11 +875,11 @@ namespace MTConnect.Tests.Common.Configurations
             var genericArgs = method.GetGenericArguments();
             Assert.That(genericArgs.Length, Is.EqualTo(1),
                 "LoadWithTriage takes exactly one generic parameter T.");
-            var attrs = genericArgs[0].GenericParameterAttributes;
+            var constraints = genericArgs[0].GetGenericParameterConstraints();
             Assert.That(
-                (attrs & System.Reflection.GenericParameterAttributes.ReferenceTypeConstraint) != 0,
-                Is.True,
-                "T must carry the ReferenceTypeConstraint (`where T : class`) so `return null` in the generic fall-through compiles — dime M2-C2 shape contract.");
+                constraints,
+                Has.Member(typeof(AgentConfiguration)),
+                "T must carry the AgentConfiguration base-type constraint (`where T : AgentConfiguration`) so the helper can stamp Path and call Normalize on the loaded instance directly — dime F-SIMP-C3-001 shape contract; `where T : AgentConfiguration` implies the ReferenceTypeConstraint by construction so the `return null` in the generic fall-through still compiles.");
         }
 
         /// <summary>
