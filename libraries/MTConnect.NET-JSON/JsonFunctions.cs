@@ -99,12 +99,32 @@ namespace MTConnect
         // ErrorResponseDocument (MTConnect.Errors) is the fourth
         // top-level response envelope — no surrogate wrapper, written
         // by the formatter's IErrorResponseDocument overload directly.
+        //
+        // The Error envelope populates a concrete
+        // MTConnectErrorHeader + Error entry + Version, so STJ walks
+        // the runtime types the production path actually serializes
+        // (interface-typed properties resolve to their concrete
+        // implementations only when the value is non-null); a naked
+        // `new ErrorResponseDocument()` with null Header / Errors /
+        // Version would only warm ErrorResponseDocument's own
+        // accessors, leaving the first real /probe error or parse
+        // failure to pay a cold LCG emit on MTConnectErrorHeader (9
+        // properties), Error (2), and System.Version (6) — the exact
+        // symptom class the singleton pattern exists to eliminate for
+        // the error path (F-IMP-C5-001).
         private static void WarmReachableGraph(JsonSerializerOptions options)
         {
             JsonSerializer.Serialize(new Streams.Json.JsonStreamsDocument(), options);
             JsonSerializer.Serialize(new Assets.Json.JsonAssetsDocument(null), options);
             JsonSerializer.Serialize(new Devices.Json.JsonDevicesDocument(), options);
-            JsonSerializer.Serialize(new Errors.ErrorResponseDocument(), options);
+            JsonSerializer.Serialize(
+                new Errors.ErrorResponseDocument
+                {
+                    Header = new Headers.MTConnectErrorHeader(),
+                    Errors = new[] { new Errors.Error() },
+                    Version = new Version(2, 5)
+                },
+                options);
         }
 #endif
 

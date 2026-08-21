@@ -1,6 +1,7 @@
 // Copyright (c) 2024 TrakHound Inc., All Rights Reserved.
 // TrakHound Inc. licenses this file to you under the MIT license.
 
+using System;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -103,12 +104,32 @@ namespace MTConnect
         // ErrorResponseDocument (from MTConnect.Errors) is the fourth
         // top-level envelope — no cppagent-specific surrogate, written
         // by the formatter's IErrorResponseDocument overload directly.
+        //
+        // The Error envelope populates a concrete
+        // MTConnectErrorHeader + Error entry + Version, so STJ walks
+        // the runtime types the production path actually serializes
+        // (interface-typed properties resolve to their concrete
+        // implementations only when the value is non-null); a naked
+        // `new ErrorResponseDocument()` with null Header / Errors /
+        // Version would only warm ErrorResponseDocument's own
+        // accessors, leaving the first real /probe error or parse
+        // failure to pay a cold LCG emit on MTConnectErrorHeader (9
+        // properties), Error (2), and System.Version (6) — the exact
+        // symptom class the singleton pattern exists to eliminate for
+        // the error path (F-IMP-C5-001).
         private static void WarmReachableGraph(JsonSerializerOptions options)
         {
             JsonSerializer.Serialize(new Streams.Json.JsonStreamsResponseDocument(), options);
             JsonSerializer.Serialize(new Assets.Json.JsonAssetsResponseDocument(), options);
             JsonSerializer.Serialize(new Devices.Json.JsonDevicesResponseDocument(), options);
-            JsonSerializer.Serialize(new Errors.ErrorResponseDocument(), options);
+            JsonSerializer.Serialize(
+                new Errors.ErrorResponseDocument
+                {
+                    Header = new Headers.MTConnectErrorHeader(),
+                    Errors = new[] { new Errors.Error() },
+                    Version = new Version(2, 5)
+                },
+                options);
         }
 #endif
 
