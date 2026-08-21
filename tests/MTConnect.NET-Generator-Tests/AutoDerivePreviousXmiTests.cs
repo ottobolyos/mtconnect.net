@@ -337,6 +337,75 @@ namespace MTConnect
         }
 
         [Test]
+        public void Commented_out_Max_declaration_does_not_confuse_the_parser()
+        {
+            // Regression pin (F-IMP-401, dime cycle 3): a stale
+            // `// public static Version Max => Version27;` line commented out
+            // above the LIVE `public static Version Max => Version29;` line
+            // would win the first-match regex without a comment-strip pass,
+            // pinning PREV_VERSION to the wrong version (v2.7 not v2.9). This
+            // fixture writes such a file with an OLD version commented out
+            // above a NEW version live, then populates the cache path for the
+            // NEW version. Auto-derive must pick up the NEW version (v2.9),
+            // resolving the NEW cache path and NOT the OLD one.
+            var repoRoot = FindRepoRoot();
+            var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
+
+            var scratch = InitScratchRepoLayout("commented-max-decoy");
+
+            // MTConnectVersions.cs with a commented-out decoy Max line above
+            // the live Max line. Both line comments (`//`) and a block-comment
+            // (`/* ... */`) decoy are exercised so the strip covers both
+            // shapes.
+            var versionsPath = Path.Combine(
+                scratch, "libraries", "MTConnect.NET-Common", "MTConnectVersions.cs");
+            File.WriteAllText(versionsPath, @"// Copyright (c) 2026 TrakHound Inc.
+
+using System;
+
+namespace MTConnect
+{
+    public static class MTConnectVersions
+    {
+        // Historical decoy — the pre-bump Max line, kept as documentation.
+        // public static Version Max => Version27;
+
+        /* Alternative shape decoy retained for reference:
+           public static Version Max => Version28;
+         */
+
+        public static Version Max => Version29;
+
+        public static readonly Version Version27 = new Version(2, 7);
+        public static readonly Version Version28 = new Version(2, 8);
+        public static readonly Version Version29 = new Version(2, 9);
+    }
+}
+");
+
+            // Populate the cache for v2.9 ONLY. If the parser is fooled by
+            // either comment-out decoy, it will look for v2.7 or v2.8 cache
+            // paths (which are absent), fall through to Strategy C, and
+            // fail-hard with a version-mismatched fingerprint.
+            var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
+            Directory.CreateDirectory(cacheDir);
+            File.Copy(realXmi, Path.Combine(cacheDir, "MTConnectSysMLModel_v2.9.xml"));
+
+            var (exitCode, stdout, stderr) = RunAutoDerive(realXmi, scratch);
+
+            Assert.That(exitCode, Is.Zero,
+                $"Comment-stripped parse must pick the live Max = Version29 and hit the v2.9 cache.\n"
+                + $"stdout:\n{stdout}\nstderr:\n{stderr}");
+            Assert.That(stdout, Does.Contain("MTConnectSysMLModel_v2.9.xml"),
+                "The comment-stripped parse must resolve the v2.9 cache path (live Max), "
+                + "not the v2.7 / v2.8 decoy paths.");
+            Assert.That(stdout, Does.Not.Contain("MTConnectSysMLModel_v2.7.xml"),
+                "The commented-out `Max => Version27` decoy must not fool the parser.");
+            Assert.That(stdout, Does.Not.Contain("MTConnectSysMLModel_v2.8.xml"),
+                "The block-commented `Max => Version28` decoy must not fool the parser.");
+        }
+
+        [Test]
         public void Submodule_dir_without_git_repo_falls_through_to_fail_hard()
         {
             // Strategy A gates on TryGetSubmoduleTag returning a matching

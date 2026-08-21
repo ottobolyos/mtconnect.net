@@ -150,9 +150,15 @@ if (!Directory.Exists(outputRoot))
 
 // Delta-mode source selection: --full-tree overrides everything; else
 // --previous-xmi if explicit; else zero-config auto-derive from
-// MTConnectVersions.Max. Any auto-derive failure is caught and mapped to a
-// clean `error: ...` + exit 1 so the operator sees an actionable message
-// on stderr rather than a stack trace on stdout.
+// MTConnectVersions.Max. The expected auto-derive failure modes
+// (InvalidOperationException from a parse-shape miss or a Strategy-C fail-hard;
+// FileNotFoundException from a missing MTConnectVersions.cs) are caught and
+// mapped to a clean `error: ...` + exit 1 so the operator sees an actionable
+// message on stderr rather than a stack trace on stdout. Any other exception
+// class (e.g. IOException from a filesystem race, UnauthorizedAccessException)
+// is intentionally NOT caught here — those escape to the runtime and surface
+// as an unhandled stack trace, which is the right signal for an unexpected
+// host-level failure that the operator-facing recovery text cannot address.
 string? resolvedPreviousXmi = null;
 string? autoDerivedCompatLabel = null;
 if (!fullTree)
@@ -187,6 +193,7 @@ if (!fullTree)
 // auto-derived "v${X}_${Y}" when we're in zero-config mode; else the legacy
 // "Previous" default (preserved for callers passing an explicit
 // --previous-xmi without a label).
+bool compatLabelIsAutoDerived = compatVersionLabel is null && autoDerivedCompatLabel is not null;
 compatVersionLabel ??= autoDerivedCompatLabel ?? "Previous";
 
 // --compat-version-label flows through Path.Combine(compatDir, $"{label}.g.cs")
@@ -217,7 +224,13 @@ else if (previousXmiPath is not null)
 else
 {
     Console.WriteLine($"Prev:   {resolvedPreviousXmi} (auto-derived from MTConnectVersions.Max)");
-    Console.WriteLine($"Label:  {compatVersionLabel} (auto-derived)");
+    // Annotate "(auto-derived)" only when the label WAS auto-derived. When
+    // the operator passed an explicit --compat-version-label alongside the
+    // zero-config prev-XMI path, that explicit label wins the ??= above,
+    // and annotating it "(auto-derived)" would be a lie.
+    Console.WriteLine(compatLabelIsAutoDerived
+        ? $"Label:  {compatVersionLabel} (auto-derived)"
+        : $"Label:  {compatVersionLabel}");
     Console.WriteLine("Mode:   delta (zero-config)");
 }
 Console.WriteLine($"Output: {outputRoot}");
@@ -356,7 +369,13 @@ static Version ReadMTConnectVersionsMax(string outputRoot)
             versionsPath);
     }
 
-    var source = File.ReadAllText(versionsPath);
+    // Strip C# comments before applying the regexes. Without this, a stale
+    // `// Max => Version27;` line commented out during a version bump would
+    // win the first-match against the real property declaration below it,
+    // pinning the parser to the wrong version. Also removes `/* ... */` block
+    // comments so a docblock example carrying the same convention shape does
+    // not leak into the parse.
+    var source = StripCSharpComments(File.ReadAllText(versionsPath));
 
     // Match `public static Version Max => VersionXY;` — the naming convention
     // is enforced by the hand-authored constant table above the Max property.
@@ -390,6 +409,177 @@ static Version ReadMTConnectVersionsMax(string outputRoot)
     var major = int.Parse(constMatch.Groups["major"].Value);
     var minor = int.Parse(constMatch.Groups["minor"].Value);
     return new Version(major, minor);
+}
+
+// Strips `//` line comments and `/* ... */` block comments from a C# source
+// string so the auto-derive regexes lock onto the LIVE declaration rather than
+// a commented-out convention-shape line. String and character literals are
+// walked verbatim so a `"// literal"` or `"/* literal */"` inside a string
+// does not get chewed up. Verbatim strings (`@"..."`) and interpolated
+// strings (`$"..."` / `$@"..."` / `@$"..."`) are handled explicitly. The
+// output preserves line numbers (comments are replaced by whitespace of the
+// same span) so downstream regex captures still report the original position.
+static string StripCSharpComments(string source)
+{
+    var sb = new StringBuilder(source.Length);
+    int i = 0;
+    while (i < source.Length)
+    {
+        char c = source[i];
+
+        // Line comment: `// ...` up to the next newline. Replace the comment
+        // span with spaces so column positions in the trailing line stay put.
+        if (c == '/' && i + 1 < source.Length && source[i + 1] == '/')
+        {
+            while (i < source.Length && source[i] != '\n')
+            {
+                sb.Append(' ');
+                i++;
+            }
+            continue;
+        }
+
+        // Block comment: `/* ... */`. Replace the entire span with spaces
+        // (and preserve embedded newlines verbatim so line numbers survive).
+        if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
+        {
+            sb.Append(' ');
+            sb.Append(' ');
+            i += 2;
+            while (i < source.Length)
+            {
+                if (source[i] == '*' && i + 1 < source.Length && source[i + 1] == '/')
+                {
+                    sb.Append(' ');
+                    sb.Append(' ');
+                    i += 2;
+                    break;
+                }
+                sb.Append(source[i] == '\n' ? '\n' : ' ');
+                i++;
+            }
+            continue;
+        }
+
+        // Verbatim / interpolated-verbatim string literal: `@"..."` /
+        // `$@"..."` / `@$"..."`. A doubled quote (`""`) is an escaped quote
+        // inside the literal; the terminator is a single unescaped quote.
+        if (c == '@' && i + 1 < source.Length && source[i + 1] == '"')
+        {
+            sb.Append(source, i, 2);
+            i += 2;
+            while (i < source.Length)
+            {
+                if (source[i] == '"')
+                {
+                    if (i + 1 < source.Length && source[i + 1] == '"')
+                    {
+                        sb.Append('"');
+                        sb.Append('"');
+                        i += 2;
+                        continue;
+                    }
+                    sb.Append('"');
+                    i++;
+                    break;
+                }
+                sb.Append(source[i]);
+                i++;
+            }
+            continue;
+        }
+        if (c == '$' && i + 1 < source.Length && source[i + 1] == '@'
+            && i + 2 < source.Length && source[i + 2] == '"')
+        {
+            sb.Append(source, i, 3);
+            i += 3;
+            while (i < source.Length)
+            {
+                if (source[i] == '"')
+                {
+                    if (i + 1 < source.Length && source[i + 1] == '"')
+                    {
+                        sb.Append('"');
+                        sb.Append('"');
+                        i += 2;
+                        continue;
+                    }
+                    sb.Append('"');
+                    i++;
+                    break;
+                }
+                sb.Append(source[i]);
+                i++;
+            }
+            continue;
+        }
+
+        // Regular / interpolated string literal: `"..."` or `$"..."`. A
+        // backslash escapes the next character (including `\"` and `\\`).
+        if (c == '"' || (c == '$' && i + 1 < source.Length && source[i + 1] == '"'))
+        {
+            if (c == '$')
+            {
+                sb.Append('$');
+                sb.Append('"');
+                i += 2;
+            }
+            else
+            {
+                sb.Append('"');
+                i++;
+            }
+            while (i < source.Length)
+            {
+                if (source[i] == '\\' && i + 1 < source.Length)
+                {
+                    sb.Append(source[i]);
+                    sb.Append(source[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                if (source[i] == '"')
+                {
+                    sb.Append('"');
+                    i++;
+                    break;
+                }
+                sb.Append(source[i]);
+                i++;
+            }
+            continue;
+        }
+
+        // Character literal: `'x'` or `'\x'`. Same escape rule as strings.
+        if (c == '\'')
+        {
+            sb.Append('\'');
+            i++;
+            while (i < source.Length)
+            {
+                if (source[i] == '\\' && i + 1 < source.Length)
+                {
+                    sb.Append(source[i]);
+                    sb.Append(source[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                if (source[i] == '\'')
+                {
+                    sb.Append('\'');
+                    i++;
+                    break;
+                }
+                sb.Append(source[i]);
+                i++;
+            }
+            continue;
+        }
+
+        sb.Append(c);
+        i++;
+    }
+    return sb.ToString();
 }
 
 // Runs `git -C <submoduleDir> describe --exact-match --tags HEAD` and returns
