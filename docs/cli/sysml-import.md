@@ -49,13 +49,13 @@ The auto-derived Compat label is `v${X}_${Y}` (e.g. `v2_7`), matching the resolv
 
 ### Delta (`--previous-xmi` override)
 
-Fires when `--previous-xmi <path>` is supplied without `--full-tree`. The importer uses the supplied file directly as the prior-version XMI and skips the auto-derive resolver entirely. The Compat label defaults to `Previous` in this mode (legacy behaviour) unless `--compat-version-label` is passed.
+Fires when `--previous-xmi <path>` is supplied without `--full-tree`. The importer uses the supplied file directly as the prior-version XMI and skips the auto-derive resolver entirely. The Compat label defaults to `Previous` in this mode (legacy behavior) unless `--compat-version-label` is passed.
 
 Use this mode for cross-version audit runs, historical XMI snapshots, or version bumps that skip a version.
 
 ### Full-tree (`--full-tree`)
 
-Fires when `--full-tree` is supplied. Disables both delta paths and re-emits every generated file under its normal `libraries/<LibraryName>/…/*.g.cs` path. Preserves the pre-Phase-4 behaviour bit for bit.
+Fires when `--full-tree` is supplied. Disables both delta paths and re-emits every generated file under its normal `libraries/<LibraryName>/…/*.g.cs` path. Preserves the pre-Phase-4 behavior bit for bit.
 
 Use this mode when the delta path is impossible (no cache, wrong submodule tag) or when the maintainer wants to review the full generated tree in a single diff.
 
@@ -182,10 +182,10 @@ A regeneration is considered clean when (a) the test suite is green at every pre
 ## See also
 
 - [CLI reference → `MTConnect.NET-SysML-Import`](../reference/cli#mtconnect-net-sysml-import) — the auto-generated flag table emitted from `Program.cs` at docs-build time.
-- [Configure & Use → Run](/configure/run) — running the agent against the regenerated library to verify end-to-end behaviour.
+- [Configure & Use → Run](/configure/run) — running the agent against the regenerated library to verify end-to-end behavior.
 - [Compliance](/compliance/) — the per-version compliance matrix that the regenerator advances.
 - [API reference → `MTConnect.SysML.MTConnectModel`](/api/MTConnect.SysML.MTConnectModel) — the in-memory model the XMI parser produces and the renderers walk.
 - [API reference → `MTConnect.SysML.ModelHelper`](/api/MTConnect.SysML.ModelHelper) — the helper surface the per-language renderers call into.
 - [API reference → `MTConnect.SysML` namespace](/api/MTConnect.SysML) — the SysML model plus per-renderer entry points.
 - [`tools/test.sh`](./test-sh) — runs after a regeneration to verify the suite stays green.
-- [`tools/dotnet.sh`](./dotnet-sh) — wraps the `dotnet run` invocation if the regeneration is being done inside a containerised SDK.
+- [`tools/dotnet.sh`](./dotnet-sh) — wraps the `dotnet run` invocation if the regeneration is being done inside a containerized SDK.
