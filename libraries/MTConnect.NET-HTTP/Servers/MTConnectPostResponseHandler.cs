@@ -151,7 +151,20 @@ namespace MTConnect.Servers
                     // mask the abort from telemetry and the request lifecycle.
                     throw;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    // Transport / IO failures are intentionally swallowed to the
+                    // caller's null-return contract (a malformed asset POST must
+                    // not tear down the request pipeline), but leave a Trace
+                    // breadcrumb naming the exception type so operators tailing
+                    // a Trace listener can distinguish "aborted upstream" from
+                    // "silent drop" without recompiling. Trace is BCL-only and
+                    // costs nothing when no listener is attached; the original
+                    // "swallow everything" semantics are preserved.
+                    System.Diagnostics.Trace.WriteLine(
+                        $"MTConnectPostResponseHandler.ReadRequestBytes swallowed "
+                        + $"{ex.GetType().FullName}: {ex.Message}");
+                }
             }
 
             return null;

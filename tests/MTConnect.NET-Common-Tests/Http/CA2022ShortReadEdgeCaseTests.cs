@@ -91,7 +91,7 @@ namespace MTConnect.NET_Common_Tests.Http
                 "Oversized body must be truncated to exactly the 2 MB buffer size.");
         }
 
-        /// <summary>Pins the cancellation-swallow contract: if the underlying stream throws (e.g. mid-drip cancellation), the outer try/catch swallows and returns null — the pre-fix behaviour is preserved so callers relying on null-as-error do not regress.</summary>
+        /// <summary>Pins the transport-error swallow contract: if the underlying stream throws a non-cancellation exception (e.g. an <c>IOException</c> from a broken transport, an <c>InvalidDataException</c> from a corrupt chunked-encoding envelope), the outer try/catch swallows and returns null so a malformed asset POST cannot tear down the request pipeline. Sibling <c>ReadRequestBytes_cancelled_mid_drip_throws_within_next_read</c> pins the inverted rule for cancellation — <c>OperationCanceledException</c> propagates rather than being swallowed here.</summary>
         [Test]
         public async Task ReadRequestBytes_returns_null_when_stream_throws()
         {
