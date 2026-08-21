@@ -49,6 +49,54 @@ non-draft PR against `master` (drafts skip; flipping ready fires the
 run on `ready_for_review`).
 
 **Matrix:** `ubuntu-latest` × `windows-latest`, .NET SDK `8.0.x` + `9.0.x`.
+The `format` gate is single-legged (`ubuntu-latest`) because
+`dotnet format`'s output is deterministic across OSes — running it
+on both would only pay the wall-clock twice for the same result.
+
+### Job 0 — `format`
+
+Verifies the whole tree is byte-identical to `dotnet format`'s
+whitespace / C# formatting output, so indentation, brace placement,
+and trailing-whitespace drift cannot silently reaccumulate into the
+baseline. Runs on `ubuntu-latest`, installs both .NET 8.0.x and
+9.0.x (the same pair the build / test / docs / e2e jobs use), and
+does not depend on any other job — a formatting-only fix therefore
+gets fast feedback without waiting on the unit + integration matrix.
+
+1. Checkout (`actions/checkout`).
+2. Setup .NET (`actions/setup-dotnet`) — installs both 8.0.x and 9.0.x.
+3. `dotnet restore MTConnect.NET.sln`.
+4. `dotnet format MTConnect.NET.sln --verify-no-changes --no-restore --verbosity diagnostic`
+   — exits non-zero on any diff; `--verbosity diagnostic` names each
+   offending file and rule directly in the CI log so a contributor
+   can reproduce and fix locally without further tooling.
+5. `dotnet restore` + `dotnet format --verify-no-changes` for the two
+   template csprojs that are not solution members
+   (`templates/mtconnect.net-agent/MTConnect-NET-Agent-Template.csproj`
+   and `.../content/MTConnect.NET-Embedded-Agent/Agent.csproj`). Both
+   ship to downstream consumers via `dotnet new`, so their formatting
+   is user-facing and belongs under the same gate.
+
+The gate enforces `dotnet format`'s default `warn` severity, not
+`--severity info`: at `info`, `dotnet format` additionally auto-fixes
+long-standing Roslyn analyzer diagnostics (`CA1859`, `CA1861`,
+`CA1018`, ...) across the whole repo, which is a materially larger
+undertaking than whitespace verification (and, on the SDK / analyzer
+combination this repo targets, occasionally aborts mid-run with
+`NotSupportedException`). Analyzer-diagnostic cleanup is tracked as
+its own follow-up rather than folded into this gate.
+
+**Local reproduction:** `dotnet format MTConnect.NET.sln` (autofix)
+or `dotnet format MTConnect.NET.sln --verify-no-changes --verbosity diagnostic`
+(dry-run, exits non-zero on any diff — the same invocation CI uses).
+The repo does not yet ship a root `.editorconfig`; the gate therefore
+relies on the SDK's built-in formatting defaults, and a future SDK
+release that shifts those defaults will re-fire the gate on unchanged
+code. Freezing the ruleset with a committed `.editorconfig` +
+`global.json` SDK pin is a tracked follow-up (see the format-baseline
+PR description).
+
+### Jobs 1–4 — build, test, docs, route-check
 
 **Steps:**
 

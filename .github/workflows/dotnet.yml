@@ -25,18 +25,30 @@ on:
 
 jobs:
   # ------------------------------------------------------------------
-  # Job 0 — dotnet format gate. Verifies the tree matches the
-  # repository's .editorconfig with zero diff, so formatting drift
+  # Job 0 — dotnet format gate. Verifies the tree matches the default
+  # `dotnet format` ruleset with zero diff, so formatting drift
   # (indentation, brace placement, whitespace) is caught at PR time
   # instead of silently accumulating into the baseline every
-  # subsequent branch then has to inherit. Uses the default "warn"
-  # severity — the same severity `dotnet format` applies with no
-  # --severity flag — rather than --severity info: at info severity
-  # dotnet format additionally tries to auto-fix long-standing Roslyn
-  # analyzer diagnostics (CA1859, CA1861, CA1018, ...) across the
-  # repo, which is a materially different (and, on this SDK/analyzer
-  # combination, occasionally crash-prone) undertaking from verifying
-  # whitespace/style formatting and is out of scope for this gate.
+  # subsequent branch then has to inherit. The repo does not yet ship
+  # a root `.editorconfig`, so the enforced ruleset is whatever the
+  # SDK pinned by `actions/setup-dotnet` treats as its whitespace /
+  # C# formatting defaults; introducing a committed `.editorconfig`
+  # that freezes those rules against future SDK drift is tracked as a
+  # follow-up (see PR description). Uses the default "warn" severity
+  # — the same severity `dotnet format` applies with no --severity
+  # flag — rather than --severity info: at info severity dotnet format
+  # additionally tries to auto-fix long-standing Roslyn analyzer
+  # diagnostics (CA1859, CA1861, CA1018, ...) across the repo, which
+  # is a materially different (and, on this SDK/analyzer combination,
+  # occasionally crash-prone) undertaking from verifying whitespace /
+  # style formatting and is out of scope for this gate. `--verbosity
+  # diagnostic` is set on the verify step so the CI log names each
+  # offending file and rule when the gate fires — a contributor can
+  # then reproduce and fix locally without scrolling for the delta.
+  # A second verify step covers the two csprojs that ship with the
+  # `dotnet new` template but are not members of `MTConnect.NET.sln`;
+  # the template itself is a public-surface artifact for downstream
+  # consumers, so it belongs under the same gate as the main tree.
   # Runs on the same draft-skip gate as the other jobs and does not
   # depend on them, so a formatting-only fix gets fast feedback.
   # ------------------------------------------------------------------
@@ -58,8 +70,31 @@ jobs:
       - name: Restore solution
         run: dotnet restore MTConnect.NET.sln
 
-      - name: Verify format (dotnet format --verify-no-changes)
-        run: dotnet format MTConnect.NET.sln --verify-no-changes --no-restore
+      - name: Verify solution format (dotnet format --verify-no-changes)
+        run: dotnet format MTConnect.NET.sln --verify-no-changes --no-restore --verbosity diagnostic
+
+      # `MTConnect.NET.sln` does not include the two csprojs that ship
+      # with the `dotnet new mtconnect.net-agent` template (the
+      # template descriptor + the generated project's csproj under
+      # `content/`). They are public-surface artifacts for downstream
+      # template consumers, so formatting drift there is exactly what
+      # the gate is meant to catch. Restore + verify them explicitly
+      # rather than adding them to the solution (which would compile
+      # them on every unrelated build and complicate the template
+      # packaging step). Each project gets its own restore + verify
+      # step so a failure names the specific template in the Actions
+      # step-summary panel rather than in the collapsed log.
+      - name: Restore template descriptor
+        run: dotnet restore templates/mtconnect.net-agent/MTConnect-NET-Agent-Template.csproj
+
+      - name: Restore template content project
+        run: dotnet restore templates/mtconnect.net-agent/content/MTConnect.NET-Embedded-Agent/Agent.csproj
+
+      - name: Verify template descriptor format
+        run: dotnet format templates/mtconnect.net-agent/MTConnect-NET-Agent-Template.csproj --verify-no-changes --no-restore --verbosity diagnostic
+
+      - name: Verify template content project format
+        run: dotnet format templates/mtconnect.net-agent/content/MTConnect.NET-Embedded-Agent/Agent.csproj --verify-no-changes --no-restore --verbosity diagnostic
 
   # ------------------------------------------------------------------
   # Job 1 — unsharded unit + integration sweep on both OS legs.
