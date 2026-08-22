@@ -90,6 +90,13 @@ namespace MTConnect.SysML.Models.Devices
         public string Deprecated { get; set; }
 
         /// <summary>
+        /// OCL constraint bodies attached to the source UML class, one
+        /// entry per non-empty <see cref="MTConnect.SysML.Xmi.UML.UmlConstraint.Body"/>.
+        /// See <see cref="MTConnectClassModel.Rules"/>.
+        /// </summary>
+        public string[] Rules { get; set; } = Array.Empty<string>();
+
+        /// <summary>
         /// The subtypes declared for this DataItem type.
         /// </summary>
         public List<MTConnectDataItemSubType> SubTypes { get; set; }
@@ -136,6 +143,12 @@ namespace MTConnect.SysML.Models.Devices
                 MaximumVersion = MTConnectVersion.LookupDeprecated(xmiDocument, umlClass.Id);
                 MinimumVersion = MTConnectVersion.LookupNormative(xmiDocument, umlClass.Id);
                 Deprecated = MTConnectVersion.LookupNormativeDeprecated(xmiDocument, umlClass.Id);
+
+                var constraintBodies = umlClass.Constraints?
+                    .Where(c => !string.IsNullOrEmpty(c?.Body))
+                    .Select(c => c.Body)
+                    .ToArray();
+                Rules = constraintBodies ?? Array.Empty<string>();
 
                 // Add SuperClass (ParentType). DataItem types in MTConnect
                 // form a single-inheritance hierarchy — the first

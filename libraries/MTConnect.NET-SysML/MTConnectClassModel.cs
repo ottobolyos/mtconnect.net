@@ -98,6 +98,18 @@ namespace MTConnect.SysML
         /// </summary>
         public string Deprecated { get; set; }
 
+        /// <summary>
+        /// OCL constraint bodies attached to the source UML class,
+        /// captured via <see cref="MTConnect.SysML.Xmi.UML.UmlConstraint.Body"/>.
+        /// One entry per <c>&lt;ownedRule xmi:type='uml:Constraint'&gt;</c>
+        /// whose specification supplies a non-empty body. Empty when the
+        /// class carries no constraints or when every constraint has an
+        /// empty body. Enables downstream <c>Rules[]</c> emission on the
+        /// generated class so the raw OCL expressions can be inspected
+        /// at runtime rather than discarded during code-generation.
+        /// </summary>
+        public string[] Rules { get; set; } = Array.Empty<string>();
+
 
         /// <summary>
         /// Creates an empty model for manual population.
@@ -151,6 +163,18 @@ namespace MTConnect.SysML
                 // as the raw string version. See property XML doc for why the
                 // legacy Version.TryParse path is deliberately skipped.
                 Deprecated = MTConnectVersion.LookupNormativeDeprecated(xmiDocument, umlClass.Id);
+
+                // Rules[] from UML constraint bodies. Filter out entries with
+                // null / empty bodies so a stereotyped-only constraint (no OCL
+                // specification child) does not surface as an empty rule.
+                // Preserve source-declaration order — the OCL specification is
+                // spec-authored and the ordering is meaningful for consumers
+                // that report violations back to the operator.
+                var constraintBodies = umlClass.Constraints?
+                    .Where(c => !string.IsNullOrEmpty(c?.Body))
+                    .Select(c => c.Body)
+                    .ToArray();
+                Rules = constraintBodies ?? Array.Empty<string>();
 
                 // Load Properties — guard `o.Name != null` per element. The
                 // outer `?.` only protects the collection; an element with null Name
