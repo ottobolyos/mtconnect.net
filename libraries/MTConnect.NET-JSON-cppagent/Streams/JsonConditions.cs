@@ -98,9 +98,9 @@ namespace MTConnect.Streams.Json
                 if (observation != null) buffered.Add(observation);
             }
 
-            AppendLevel(buffered, LevelNameFault,       JsonConditionWrapper.OfFault);
-            AppendLevel(buffered, LevelNameWarning,     JsonConditionWrapper.OfWarning);
-            AppendLevel(buffered, LevelNameNormal,      JsonConditionWrapper.OfNormal);
+            AppendLevel(buffered, LevelNameFault, JsonConditionWrapper.OfFault);
+            AppendLevel(buffered, LevelNameWarning, JsonConditionWrapper.OfWarning);
+            AppendLevel(buffered, LevelNameNormal, JsonConditionWrapper.OfNormal);
             AppendLevel(buffered, LevelNameUnavailable, JsonConditionWrapper.OfUnavailable);
         }
 
@@ -127,9 +127,9 @@ namespace MTConnect.Streams.Json
 
         // Level names materialised once — enum ToString() would
         // otherwise allocate a fresh string per AppendLevel call.
-        private const string LevelNameFault       = nameof(ConditionLevel.FAULT);
-        private const string LevelNameWarning     = nameof(ConditionLevel.WARNING);
-        private const string LevelNameNormal      = nameof(ConditionLevel.NORMAL);
+        private const string LevelNameFault = nameof(ConditionLevel.FAULT);
+        private const string LevelNameWarning = nameof(ConditionLevel.WARNING);
+        private const string LevelNameNormal = nameof(ConditionLevel.NORMAL);
         private const string LevelNameUnavailable = nameof(ConditionLevel.UNAVAILABLE);
 
         private void AppendLevel(

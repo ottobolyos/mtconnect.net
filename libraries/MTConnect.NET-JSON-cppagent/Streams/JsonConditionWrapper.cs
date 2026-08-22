@@ -84,9 +84,9 @@ namespace MTConnect.Streams.Json
         /// </summary>
         [JsonIgnore]
         public string Level =>
-            Fault       != null ? "Fault"       :
-            Warning     != null ? "Warning"     :
-            Normal      != null ? "Normal"      :
+            Fault != null ? "Fault" :
+            Warning != null ? "Warning" :
+            Normal != null ? "Normal" :
             Unavailable != null ? "Unavailable" : null;
 
         /// <summary>
@@ -98,7 +98,7 @@ namespace MTConnect.Streams.Json
         /// A new <see cref="JsonConditionWrapper"/> with only
         /// <see cref="Fault"/> populated.
         /// </returns>
-        public static JsonConditionWrapper OfFault(JsonCondition condition)       => new JsonConditionWrapper { Fault       = condition };
+        public static JsonConditionWrapper OfFault(JsonCondition condition) => new JsonConditionWrapper { Fault = condition };
 
         /// <summary>
         /// Constructs a wrapper carrying the given condition at
@@ -109,7 +109,7 @@ namespace MTConnect.Streams.Json
         /// A new <see cref="JsonConditionWrapper"/> with only
         /// <see cref="Warning"/> populated.
         /// </returns>
-        public static JsonConditionWrapper OfWarning(JsonCondition condition)     => new JsonConditionWrapper { Warning     = condition };
+        public static JsonConditionWrapper OfWarning(JsonCondition condition) => new JsonConditionWrapper { Warning = condition };
 
         /// <summary>
         /// Constructs a wrapper carrying the given condition at
@@ -120,7 +120,7 @@ namespace MTConnect.Streams.Json
         /// A new <see cref="JsonConditionWrapper"/> with only
         /// <see cref="Normal"/> populated.
         /// </returns>
-        public static JsonConditionWrapper OfNormal(JsonCondition condition)      => new JsonConditionWrapper { Normal      = condition };
+        public static JsonConditionWrapper OfNormal(JsonCondition condition) => new JsonConditionWrapper { Normal = condition };
 
         /// <summary>
         /// Constructs a wrapper carrying the given condition at
@@ -149,9 +149,9 @@ namespace MTConnect.Streams.Json
         /// </returns>
         public IConditionObservation ToObservation()
         {
-            if (Fault       != null) return Fault.ToCondition(ConditionLevel.FAULT);
-            if (Warning     != null) return Warning.ToCondition(ConditionLevel.WARNING);
-            if (Normal      != null) return Normal.ToCondition(ConditionLevel.NORMAL);
+            if (Fault != null) return Fault.ToCondition(ConditionLevel.FAULT);
+            if (Warning != null) return Warning.ToCondition(ConditionLevel.WARNING);
+            if (Normal != null) return Normal.ToCondition(ConditionLevel.NORMAL);
             if (Unavailable != null) return Unavailable.ToCondition(ConditionLevel.UNAVAILABLE);
             return null;
         }

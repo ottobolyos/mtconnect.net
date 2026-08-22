@@ -45,9 +45,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
 
             var wrapper = JsonConditionWrapper.OfFault(c);
 
-            Assert.That(wrapper.Fault,       Is.SameAs(c));
-            Assert.That(wrapper.Warning,     Is.Null);
-            Assert.That(wrapper.Normal,      Is.Null);
+            Assert.That(wrapper.Fault, Is.SameAs(c));
+            Assert.That(wrapper.Warning, Is.Null);
+            Assert.That(wrapper.Normal, Is.Null);
             Assert.That(wrapper.Unavailable, Is.Null);
         }
 
@@ -59,9 +59,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
 
             var wrapper = JsonConditionWrapper.OfWarning(c);
 
-            Assert.That(wrapper.Fault,       Is.Null);
-            Assert.That(wrapper.Warning,     Is.SameAs(c));
-            Assert.That(wrapper.Normal,      Is.Null);
+            Assert.That(wrapper.Fault, Is.Null);
+            Assert.That(wrapper.Warning, Is.SameAs(c));
+            Assert.That(wrapper.Normal, Is.Null);
             Assert.That(wrapper.Unavailable, Is.Null);
         }
 
@@ -73,9 +73,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
 
             var wrapper = JsonConditionWrapper.OfNormal(c);
 
-            Assert.That(wrapper.Fault,       Is.Null);
-            Assert.That(wrapper.Warning,     Is.Null);
-            Assert.That(wrapper.Normal,      Is.SameAs(c));
+            Assert.That(wrapper.Fault, Is.Null);
+            Assert.That(wrapper.Warning, Is.Null);
+            Assert.That(wrapper.Normal, Is.SameAs(c));
             Assert.That(wrapper.Unavailable, Is.Null);
         }
 
@@ -87,9 +87,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
 
             var wrapper = JsonConditionWrapper.OfUnavailable(c);
 
-            Assert.That(wrapper.Fault,       Is.Null);
-            Assert.That(wrapper.Warning,     Is.Null);
-            Assert.That(wrapper.Normal,      Is.Null);
+            Assert.That(wrapper.Fault, Is.Null);
+            Assert.That(wrapper.Warning, Is.Null);
+            Assert.That(wrapper.Normal, Is.Null);
             Assert.That(wrapper.Unavailable, Is.SameAs(c));
         }
 
@@ -148,9 +148,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             var u = NewCondition("u1");
 
             Assert.That(new JsonConditionWrapper { Fault = f, Warning = w, Normal = n, Unavailable = u }.Value, Is.SameAs(f));
-            Assert.That(new JsonConditionWrapper {              Warning = w, Normal = n, Unavailable = u }.Value, Is.SameAs(w));
-            Assert.That(new JsonConditionWrapper {                           Normal = n, Unavailable = u }.Value, Is.SameAs(n));
-            Assert.That(new JsonConditionWrapper {                                       Unavailable = u }.Value, Is.SameAs(u));
+            Assert.That(new JsonConditionWrapper { Warning = w, Normal = n, Unavailable = u }.Value, Is.SameAs(w));
+            Assert.That(new JsonConditionWrapper { Normal = n, Unavailable = u }.Value, Is.SameAs(n));
+            Assert.That(new JsonConditionWrapper { Unavailable = u }.Value, Is.SameAs(u));
         }
 
         // ------------------------------------------------------------------
@@ -212,9 +212,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             var u = NewCondition("u1");
 
             Assert.That(new JsonConditionWrapper { Fault = f, Warning = w, Normal = n, Unavailable = u }.Level, Is.EqualTo("Fault"));
-            Assert.That(new JsonConditionWrapper {              Warning = w, Normal = n, Unavailable = u }.Level, Is.EqualTo("Warning"));
-            Assert.That(new JsonConditionWrapper {                           Normal = n, Unavailable = u }.Level, Is.EqualTo("Normal"));
-            Assert.That(new JsonConditionWrapper {                                       Unavailable = u }.Level, Is.EqualTo("Unavailable"));
+            Assert.That(new JsonConditionWrapper { Warning = w, Normal = n, Unavailable = u }.Level, Is.EqualTo("Warning"));
+            Assert.That(new JsonConditionWrapper { Normal = n, Unavailable = u }.Level, Is.EqualTo("Normal"));
+            Assert.That(new JsonConditionWrapper { Unavailable = u }.Level, Is.EqualTo("Unavailable"));
         }
 
         /// <summary>
@@ -354,7 +354,7 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
         {
             var wrapper = new JsonConditionWrapper
             {
-                Fault   = NewCondition("f1"),
+                Fault = NewCondition("f1"),
                 Warning = NewCondition("w1"),
             };
 
@@ -366,7 +366,7 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             Assert.That(fault.GetProperty("dataItemId").GetString(), Is.EqualTo("f1"));
             Assert.That(root.TryGetProperty("Warning", out var warning), Is.True);
             Assert.That(warning.GetProperty("dataItemId").GetString(), Is.EqualTo("w1"));
-            Assert.That(root.TryGetProperty("Normal",      out _), Is.False);
+            Assert.That(root.TryGetProperty("Normal", out _), Is.False);
             Assert.That(root.TryGetProperty("Unavailable", out _), Is.False);
         }
 
@@ -384,8 +384,8 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             Assert.That(wrapper, Is.Not.Null);
             Assert.That(wrapper!.Fault, Is.Not.Null);
             Assert.That(wrapper.Fault.DataItemId, Is.EqualTo("f1"));
-            Assert.That(wrapper.Warning,     Is.Null);
-            Assert.That(wrapper.Normal,      Is.Null);
+            Assert.That(wrapper.Warning, Is.Null);
+            Assert.That(wrapper.Normal, Is.Null);
             Assert.That(wrapper.Unavailable, Is.Null);
             Assert.That(wrapper.Level, Is.EqualTo("Fault"));
         }
@@ -397,8 +397,8 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             var wrapper = JsonSerializer.Deserialize<JsonConditionWrapper>("{\"Warning\":{\"dataItemId\":\"w1\"}}");
 
             Assert.That(wrapper!.Warning, Is.Not.Null);
-            Assert.That(wrapper.Fault,       Is.Null);
-            Assert.That(wrapper.Normal,      Is.Null);
+            Assert.That(wrapper.Fault, Is.Null);
+            Assert.That(wrapper.Normal, Is.Null);
             Assert.That(wrapper.Unavailable, Is.Null);
         }
 
@@ -409,8 +409,8 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             var wrapper = JsonSerializer.Deserialize<JsonConditionWrapper>("{\"Normal\":{\"dataItemId\":\"n1\"}}");
 
             Assert.That(wrapper!.Normal, Is.Not.Null);
-            Assert.That(wrapper.Fault,       Is.Null);
-            Assert.That(wrapper.Warning,     Is.Null);
+            Assert.That(wrapper.Fault, Is.Null);
+            Assert.That(wrapper.Warning, Is.Null);
             Assert.That(wrapper.Unavailable, Is.Null);
         }
 
@@ -421,9 +421,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             var wrapper = JsonSerializer.Deserialize<JsonConditionWrapper>("{\"Unavailable\":{\"dataItemId\":\"u1\"}}");
 
             Assert.That(wrapper!.Unavailable, Is.Not.Null);
-            Assert.That(wrapper.Fault,   Is.Null);
+            Assert.That(wrapper.Fault, Is.Null);
             Assert.That(wrapper.Warning, Is.Null);
-            Assert.That(wrapper.Normal,  Is.Null);
+            Assert.That(wrapper.Normal, Is.Null);
         }
     }
 }

@@ -358,10 +358,10 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
 
             Assert.That(conditions!.Count, Is.EqualTo(4));
 
-            Assert.That(conditions[0].Fault,       Is.Not.Null); Assert.That(conditions[0].Fault!.DataItemId,   Is.EqualTo("f1"));
-            Assert.That(conditions[1].Normal,      Is.Not.Null); Assert.That(conditions[1].Normal!.DataItemId,  Is.EqualTo("n1"));
+            Assert.That(conditions[0].Fault, Is.Not.Null); Assert.That(conditions[0].Fault!.DataItemId, Is.EqualTo("f1"));
+            Assert.That(conditions[1].Normal, Is.Not.Null); Assert.That(conditions[1].Normal!.DataItemId, Is.EqualTo("n1"));
             Assert.That((ulong)conditions[1].Normal!.Sequence, Is.EqualTo(42UL));
-            Assert.That(conditions[2].Warning,     Is.Not.Null); Assert.That(conditions[2].Warning!.Type,       Is.EqualTo("POSITION"));
+            Assert.That(conditions[2].Warning, Is.Not.Null); Assert.That(conditions[2].Warning!.Type, Is.EqualTo("POSITION"));
             Assert.That(conditions[3].Unavailable, Is.Not.Null); Assert.That(conditions[3].Unavailable!.DataItemId, Is.EqualTo("u1"));
 
             // Cross-checks — non-matching properties are null.
@@ -462,12 +462,12 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             // First wrapper — unknown "Bogus" is silently dropped, all four
             // known-level properties remain null.
             var bogus = conditions[0];
-            Assert.That(bogus.Fault,       Is.Null);
-            Assert.That(bogus.Warning,     Is.Null);
-            Assert.That(bogus.Normal,      Is.Null);
+            Assert.That(bogus.Fault, Is.Null);
+            Assert.That(bogus.Warning, Is.Null);
+            Assert.That(bogus.Normal, Is.Null);
             Assert.That(bogus.Unavailable, Is.Null);
-            Assert.That(bogus.Value,       Is.Null);
-            Assert.That(bogus.Level,       Is.Null);
+            Assert.That(bogus.Value, Is.Null);
+            Assert.That(bogus.Level, Is.Null);
             Assert.That(bogus.ToObservation(), Is.Null);
 
             // Second wrapper — known "Fault" still populates correctly.
@@ -547,11 +547,11 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
         {
             var wrapper = levelName switch
             {
-                "Fault"       => JsonConditionWrapper.OfFault      (MakeEntry("x1", "TEMPERATURE")),
-                "Warning"     => JsonConditionWrapper.OfWarning    (MakeEntry("x1", "TEMPERATURE")),
-                "Normal"      => JsonConditionWrapper.OfNormal     (MakeEntry("x1", "TEMPERATURE")),
+                "Fault" => JsonConditionWrapper.OfFault(MakeEntry("x1", "TEMPERATURE")),
+                "Warning" => JsonConditionWrapper.OfWarning(MakeEntry("x1", "TEMPERATURE")),
+                "Normal" => JsonConditionWrapper.OfNormal(MakeEntry("x1", "TEMPERATURE")),
                 "Unavailable" => JsonConditionWrapper.OfUnavailable(MakeEntry("x1", "TEMPERATURE")),
-                _             => throw new System.ArgumentOutOfRangeException(nameof(levelName)),
+                _ => throw new System.ArgumentOutOfRangeException(nameof(levelName)),
             };
             var original = new JsonConditions { wrapper };
 
@@ -594,9 +594,9 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
             Assert.That(conditions!.Count, Is.EqualTo(1));
 
             var wrapper = conditions[0];
-            Assert.That(wrapper.Fault,   Is.Not.Null); Assert.That(wrapper.Fault!.DataItemId,   Is.EqualTo("f1"));
+            Assert.That(wrapper.Fault, Is.Not.Null); Assert.That(wrapper.Fault!.DataItemId, Is.EqualTo("f1"));
             Assert.That(wrapper.Warning, Is.Not.Null); Assert.That(wrapper.Warning!.DataItemId, Is.EqualTo("w1"));
-            Assert.That(wrapper.Normal,      Is.Null);
+            Assert.That(wrapper.Normal, Is.Null);
             Assert.That(wrapper.Unavailable, Is.Null);
 
             // Precedence: Fault > Warning > Normal > Unavailable.
@@ -619,22 +619,22 @@ namespace MTConnect.NET_JSON_cppagent_Tests.Streams
 
             public ConditionLevel Level { get; init; }
 
-            public string DataItemId    { get; init; } = string.Empty;
-            public string DeviceUuid    => string.Empty;
-            public IDataItem DataItem   => null!;
+            public string DataItemId { get; init; } = string.Empty;
+            public string DeviceUuid => string.Empty;
+            public IDataItem DataItem => null!;
             public DataItemCategory Category => DataItemCategory.CONDITION;
-            public string Type          => string.Empty;
-            public string SubType       => string.Empty;
-            public string Name          => string.Empty;
-            public ulong InstanceId     => 0;
-            public ulong Sequence       => 0;
-            public DateTime Timestamp   => DateTime.UnixEpoch;
+            public string Type => string.Empty;
+            public string SubType => string.Empty;
+            public string Name => string.Empty;
+            public ulong InstanceId => 0;
+            public ulong Sequence => 0;
+            public DateTime Timestamp => DateTime.UnixEpoch;
             public DateTimeOffset TimeZoneTimestamp => DateTimeOffset.UnixEpoch;
             public string CompositionId => string.Empty;
             public DataItemRepresentation Representation => DataItemRepresentation.VALUE;
-            public Quality Quality      => Quality.VALID;
-            public bool Deprecated      => false;
-            public bool Extended        => false;
+            public Quality Quality => Quality.VALID;
+            public bool Deprecated => false;
+            public bool Extended => false;
             public ObservationValue[] Values => Array.Empty<ObservationValue>();
 
             public string GetValue(string valueKey) =>
