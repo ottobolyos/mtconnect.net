@@ -482,7 +482,7 @@ namespace MTConnect.NET_JSON_Tests.Regressions
         /// expected type OR a <c>ldsfld</c> loading a static field of
         /// that type — semantically equivalent for warm-up, because STJ
         /// walks the runtime type of whatever value the caller passes
-        /// into <see cref="System.Text.Json.JsonSerializer.Serialize"/>
+        /// into <see cref="System.Text.Json.JsonSerializer.Serialize{TValue}(TValue,System.Text.Json.JsonSerializerOptions)"/>
         /// regardless of how the instance was produced. The current
         /// warm-up uses <c>MTConnectVersions.Version25</c> (a static
         /// field of type <see cref="System.Version"/>) rather than a
