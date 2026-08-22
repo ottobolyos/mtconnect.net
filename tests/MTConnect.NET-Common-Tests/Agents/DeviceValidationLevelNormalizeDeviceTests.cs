@@ -78,10 +78,10 @@ namespace MTConnect.Tests.Common.Agents
                 DeviceValidationLevel.Remove,
                 DeviceValidationLevel.Strict,
             }));
-            Assert.That((int)DeviceValidationLevel.Ignore,  Is.EqualTo(0));
+            Assert.That((int)DeviceValidationLevel.Ignore, Is.EqualTo(0));
             Assert.That((int)DeviceValidationLevel.Warning, Is.EqualTo(1));
-            Assert.That((int)DeviceValidationLevel.Remove,  Is.EqualTo(2));
-            Assert.That((int)DeviceValidationLevel.Strict,  Is.EqualTo(3));
+            Assert.That((int)DeviceValidationLevel.Remove, Is.EqualTo(2));
+            Assert.That((int)DeviceValidationLevel.Strict, Is.EqualTo(3));
         }
 
         /// <summary>Pins the AgentConfiguration default: <see cref="AgentConfiguration.DeviceValidationLevel"/> is <see cref="DeviceValidationLevel.Warning"/>.</summary>
