@@ -1,4 +1,5 @@
 ﻿using MTConnect.SysML.Xmi;
+using MTConnect.SysML.Xmi.Navigation;
 using MTConnect.SysML.Xmi.UML;
 using System;
 using System.Collections.Generic;
@@ -291,10 +292,30 @@ namespace MTConnect.SysML
             // and silently swallowed pathological cycles if a cap had been
             // present.
 
-            // Build the local-id set once — mutate it as grafts land, so the
-            // subsequent existence check is O(1) instead of O(n).
-            var localUmlIds = new HashSet<string>(
-                classes.Where(c => !string.IsNullOrEmpty(c.UmlId)).Select(c => c.UmlId));
+            // Ambient-aware known-parent set. When an IdCacheContext is
+            // active on this thread — the intended installation site is
+            // MTConnectModel.Parse, so every per-package parser sees a
+            // shared cache — seed the known-UmlId set from the ambient
+            // dictionary so a dangling parent already parsed by a sibling
+            // package parser is recognised without a redundant graft. When
+            // no context is active the ambient dictionary is absent and
+            // behaviour reduces to the previous per-call scratch HashSet
+            // (parity with the pre-vendor behaviour). This is the consumer
+            // swap that lets the O(1) hash-lookup replace the per-call
+            // O(n) scan; the vendored IdCacheContext / IdCacheContextHolder
+            // pair supplies the thread-scoped storage.
+            var ambient = IdCacheContextHolder.Current;
+            var localUmlIds = new HashSet<string>();
+            if (ambient != null)
+            {
+                foreach (var key in ambient.IdCache.Keys) localUmlIds.Add(key);
+            }
+            foreach (var c in classes)
+            {
+                if (string.IsNullOrEmpty(c.UmlId)) continue;
+                localUmlIds.Add(c.UmlId);
+                ambient?.AddToCache(c.UmlId, c);
+            }
 
             // Dedupe missing parents via HashSet.Add rather than GroupBy/First —
             // same first-wins semantics with one allocation instead of an
@@ -363,6 +384,15 @@ namespace MTConnect.SysML
                 grafted.Properties = new List<MTConnectPropertyModel>();
 
                 classes.Add(grafted);
+
+                // Register the graft in the ambient cache so a subsequent
+                // ResolveDanglingParents call on a sibling package's class
+                // list sees the newly-grafted parent as already-known and
+                // does not re-graft it. No-op when no context is active.
+                if (!string.IsNullOrEmpty(grafted.UmlId))
+                {
+                    ambient?.AddToCache(grafted.UmlId, grafted);
+                }
             }
         }
     }
