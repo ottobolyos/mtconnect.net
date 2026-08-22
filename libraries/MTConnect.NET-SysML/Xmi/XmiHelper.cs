@@ -26,6 +26,15 @@
             public const string OBSERVES = "observes";
             public const string ORGANIZER = "organizer";
             public const string VALUE_TYPE = "valueType";
+            /// <summary>
+            /// <c>&lt;Profile:updated /&gt;</c> child element on a
+            /// <see cref="MTConnect.SysML.Xmi.Profile.Normative"/> stereotype
+            /// application, holding one MTConnect version at which the
+            /// stereotyped element was updated. Vendored from mtconnect/
+            /// MtconnectTranspiler v2.8 so the fork can preserve the full
+            /// version history of every normative element.
+            /// </summary>
+            public const string UPDATED = "updated";
             #endregion
         }
 
