@@ -60,10 +60,17 @@ namespace MTConnect.SysML.Xmi.UML
         private DefaultValue? _defaultValue;
         /// <summary>
         /// The deserialized default value of the property, materialized
-        /// lazily from <see cref="DefaultValueElement"/> as either a
-        /// <see cref="UmlInstanceValue"/> or <see cref="UmlLiteralString"/>
-        /// depending on the element's <c>xmi:type</c>. Returns <c>null</c>
-        /// when no default value element is present.
+        /// lazily from <see cref="DefaultValueElement"/>. Recognises five
+        /// <c>xmi:type</c> variants — the fork's original
+        /// <see cref="UmlInstanceValue"/> + <see cref="UmlLiteralString"/>
+        /// plus <see cref="UmlLiteralInteger"/> / <see cref="UmlLiteralReal"/>
+        /// / <see cref="UmlLiteralBoolean"/> vendored from
+        /// mtconnect/MtconnectTranspiler v2.8. Returns <c>null</c> when no
+        /// default value element is present, or when the <c>xmi:type</c>
+        /// falls outside the recognised set (unknown types are ignored
+        /// rather than swallowed silently — call sites can distinguish
+        /// "no default declared" from "unknown default type" by inspecting
+        /// <see cref="DefaultValueElement"/> directly).
         /// </summary>
         public DefaultValue? DefaultValue
         {
@@ -81,7 +88,6 @@ namespace MTConnect.SysML.Xmi.UML
                     Namespace = ""
                 };
 
-                //XmlSerializer serial = new XmlSerializer(typeof(T), xRoot);
                 using var xReader = new XmlNodeReader(DefaultValueElement);
 
                 XmlSerializer? serial = null;
@@ -93,6 +99,15 @@ namespace MTConnect.SysML.Xmi.UML
                         break;
                     case XmiHelper.UmlStructure.LiteralString:
                         serial = new XmlSerializer(typeof(UmlLiteralString), xRoot);
+                        break;
+                    case XmiHelper.UmlStructure.LiteralInteger:
+                        serial = new XmlSerializer(typeof(UmlLiteralInteger), xRoot);
+                        break;
+                    case XmiHelper.UmlStructure.LiteralReal:
+                        serial = new XmlSerializer(typeof(UmlLiteralReal), xRoot);
+                        break;
+                    case XmiHelper.UmlStructure.LiteralBoolean:
+                        serial = new XmlSerializer(typeof(UmlLiteralBoolean), xRoot);
                         break;
                     default:
                         break;
@@ -111,6 +126,15 @@ namespace MTConnect.SysML.Xmi.UML
                                 break;
                             case XmiHelper.UmlStructure.LiteralString:
                                 _defaultValue = deserializedObject as UmlLiteralString;
+                                break;
+                            case XmiHelper.UmlStructure.LiteralInteger:
+                                _defaultValue = deserializedObject as UmlLiteralInteger;
+                                break;
+                            case XmiHelper.UmlStructure.LiteralReal:
+                                _defaultValue = deserializedObject as UmlLiteralReal;
+                                break;
+                            case XmiHelper.UmlStructure.LiteralBoolean:
+                                _defaultValue = deserializedObject as UmlLiteralBoolean;
                                 break;
                             default:
                                 break;

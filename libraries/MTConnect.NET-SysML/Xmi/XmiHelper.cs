@@ -148,6 +148,24 @@
             /// </summary>
             public const string LiteralString = "uml:LiteralString";
             /// <summary>
+            /// <c>&lt;defaultValue xmi:type='uml:LiteralInteger' /&gt;</c>.
+            /// Vendored from mtconnect/MtconnectTranspiler v2.8 alongside
+            /// <see cref="LiteralReal"/> + <see cref="LiteralBoolean"/> so the
+            /// fork can parse integer default values (multiplicity bounds,
+            /// deprecation-version integer literals).
+            /// </summary>
+            public const string LiteralInteger = "uml:LiteralInteger";
+            /// <summary>
+            /// <c>&lt;defaultValue xmi:type='uml:LiteralReal' /&gt;</c>.
+            /// Vendored from mtconnect/MtconnectTranspiler v2.8.
+            /// </summary>
+            public const string LiteralReal = "uml:LiteralReal";
+            /// <summary>
+            /// <c>&lt;defaultValue xmi:type='uml:LiteralBoolean' /&gt;</c>.
+            /// Vendored from mtconnect/MtconnectTranspiler v2.8.
+            /// </summary>
+            public const string LiteralBoolean = "uml:LiteralBoolean";
+            /// <summary>
             /// <c>&lt;uml:Model xmi:type='uml:Model' /&gt;</c>
             /// </summary>
             public const string Model = "uml:Model";
