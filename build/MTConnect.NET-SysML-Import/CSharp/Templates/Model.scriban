@@ -8,6 +8,9 @@ namespace {{namespace}}
     /// <summary>
     /// {{description}}
     /// </summary>
+{{- if (deprecated) }}
+    [System.Obsolete("Deprecated in v{{deprecated}}")]
+{{- end }}
     public {{- if (is_abstract) }} abstract{{ end }} {{- if (is_partial) }} partial{{ end }} class {{name}} : {{ if (parent_name) }}{{parent_name}}, {{ end }}I{{name}}{{ for additional_parent_name in additional_parent_names }}, I{{additional_parent_name}}{{ end }}
     {
         /// <summary>

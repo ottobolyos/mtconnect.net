@@ -86,6 +86,18 @@ namespace MTConnect.SysML
         /// </summary>
         public Version MinimumVersion { get; set; }
 
+        /// <summary>
+        /// Raw <c>deprecated</c> version literal captured from the
+        /// <see cref="MTConnect.SysML.Xmi.Profile.Normative"/> stereotype
+        /// on the source UML class (vendored from mtconnect/
+        /// MtconnectTranspiler v2.8), or <c>null</c> when the class is
+        /// not deprecated on its Normative stereotype. Preserved as a
+        /// string so the exact upstream literal (e.g. <c>"1.4"</c> vs
+        /// <c>"1.4.0"</c>) round-trips into the emitted
+        /// <c>[Obsolete("Deprecated in v{Version}")]</c> attribute.
+        /// </summary>
+        public string Deprecated { get; set; }
+
 
         /// <summary>
         /// Creates an empty model for manual population.
@@ -134,6 +146,11 @@ namespace MTConnect.SysML
                 // non-null but empty, FirstOrDefault returns null and `.Body` would NRE.
                 var description = umlClass.Comments?.FirstOrDefault()?.Body;
                 Description = ModelHelper.ProcessDescription(description);
+
+                // Normative.Deprecated (v2.8 widening) — read straight through
+                // as the raw string version. See property XML doc for why the
+                // legacy Version.TryParse path is deliberately skipped.
+                Deprecated = MTConnectVersion.LookupNormativeDeprecated(xmiDocument, umlClass.Id);
 
                 // Load Properties — guard `o.Name != null` per element. The
                 // outer `?.` only protects the collection; an element with null Name

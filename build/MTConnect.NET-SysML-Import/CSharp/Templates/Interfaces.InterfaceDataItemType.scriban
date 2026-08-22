@@ -8,6 +8,9 @@ namespace MTConnect.Interfaces
     /// <summary>
     /// {{description}}
     /// </summary>
+{{- if (deprecated) }}
+    [System.Obsolete("Deprecated in v{{deprecated}}")]
+{{- end }}
     public class {{name}} : InterfaceDataItem
     {
         /// <summary>

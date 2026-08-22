@@ -81,6 +81,15 @@ namespace MTConnect.SysML.Models.Devices
         public Version MinimumVersion { get; set; }
 
         /// <summary>
+        /// Raw <c>deprecated</c> version literal captured from the
+        /// <see cref="MTConnect.SysML.Xmi.Profile.Normative"/> stereotype
+        /// (vendored from mtconnect/MtconnectTranspiler v2.8). See
+        /// <see cref="MTConnectClassModel.Deprecated"/> for the rationale
+        /// behind preserving the raw string.
+        /// </summary>
+        public string Deprecated { get; set; }
+
+        /// <summary>
         /// The subtypes declared for this DataItem type.
         /// </summary>
         public List<MTConnectDataItemSubType> SubTypes { get; set; }
@@ -126,6 +135,7 @@ namespace MTConnect.SysML.Models.Devices
 
                 MaximumVersion = MTConnectVersion.LookupDeprecated(xmiDocument, umlClass.Id);
                 MinimumVersion = MTConnectVersion.LookupNormative(xmiDocument, umlClass.Id);
+                Deprecated = MTConnectVersion.LookupNormativeDeprecated(xmiDocument, umlClass.Id);
 
                 // Add SuperClass (ParentType). DataItem types in MTConnect
                 // form a single-inheritance hierarchy — the first
