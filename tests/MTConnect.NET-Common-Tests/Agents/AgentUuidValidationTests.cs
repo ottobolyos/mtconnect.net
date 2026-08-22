@@ -207,7 +207,7 @@ namespace MTConnect.Tests.Common.Agents
         public void TryValidate_uppercase_hex_is_normalized_to_lowercase()
         {
             const string Uppercased = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8";
-            const string Expected   = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+            const string Expected = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 
             var ok = DeterministicAgentUuid.TryValidate(Uppercased, out var normalized);
 
@@ -543,7 +543,7 @@ namespace MTConnect.Tests.Common.Agents
         public void Warn_delegate_invoked_twice_when_both_override_and_persisted_are_malformed()
         {
             var messages = new List<string>();
-            const string BadOverride  = "not-a-uuid";
+            const string BadOverride = "not-a-uuid";
             const string BadPersisted = "also-not-a-uuid";
 
             var resolved = AgentUuidResolver.Resolve(
@@ -860,7 +860,7 @@ namespace MTConnect.Tests.Common.Agents
         public void TryValidate_mixed_case_hex_is_accepted_and_normalized_to_lowercase()
         {
             const string MixedCase = "6Ba7B810-9dAd-11D1-80B4-00c04Fd430c8";
-            const string Expected  = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+            const string Expected = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 
             var ok = DeterministicAgentUuid.TryValidate(MixedCase, out var normalized);
 
@@ -945,7 +945,7 @@ namespace MTConnect.Tests.Common.Agents
         public void Resolve_valid_override_short_circuits_and_ignores_malformed_persisted_without_warn()
         {
             var messages = new List<string>();
-            const string ValidOverride    = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+            const string ValidOverride = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
             const string MalformedPersist = "definitely-not-a-uuid";
 
             var resolved = AgentUuidResolver.Resolve(

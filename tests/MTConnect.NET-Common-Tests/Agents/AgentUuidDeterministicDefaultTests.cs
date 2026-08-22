@@ -245,7 +245,7 @@ namespace MTConnect.Tests.Common.Agents
         public void Derive_port_change_produces_different_uuid_for_same_agent_name()
         {
             const string AgentName = "fixture-det-agent-port";
-            const string Hostname  = "canonical-host";
+            const string Hostname = "canonical-host";
 
             var derivedAt5000 = DeterministicAgentUuid.Derive(AgentName, Hostname, port: 5000);
             var derivedAt8080 = DeterministicAgentUuid.Derive(AgentName, Hostname, port: 8080);
@@ -266,10 +266,10 @@ namespace MTConnect.Tests.Common.Agents
         public void Derive_port_zero_sentinel_does_not_collide_with_any_positive_port()
         {
             const string AgentName = "fixture-det-agent-port-zero";
-            const string Hostname  = "canonical-host";
+            const string Hostname = "canonical-host";
 
             var derivedAtZero = DeterministicAgentUuid.Derive(AgentName, Hostname, port: 0);
-            var derivedAtOne  = DeterministicAgentUuid.Derive(AgentName, Hostname, port: 1);
+            var derivedAtOne = DeterministicAgentUuid.Derive(AgentName, Hostname, port: 1);
 
             Assert.That(derivedAtZero, Is.Not.EqualTo(derivedAtOne),
                 "port: 0 sentinel must be distinct from port: 1 — 0 is not silently 'omit'.");
