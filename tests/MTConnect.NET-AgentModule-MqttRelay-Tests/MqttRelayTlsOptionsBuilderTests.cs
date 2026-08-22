@@ -252,6 +252,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
         // in TearDown.
         private string _tempPfxPath;
 
+        /// <summary>Deletes the temp self-signed PFX created by a certificate-loading test, if one was written.</summary>
         [TearDown]
         public void CleanupPfx()
         {
