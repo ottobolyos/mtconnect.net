@@ -15,6 +15,16 @@ namespace MTConnect.Devices.Configurations
         /// </summary>
         public const string DescriptionText = "Reference system that associates a unique set of n parameters with each point in an n-dimensional space. ISO 10303-218:2004";
 
+        /// <summary>
+        /// The OCL constraint bodies attached to this type in the source
+        /// SysML model, preserved verbatim so downstream consumers can
+        /// inspect the spec's raw validation rules at runtime.
+        /// </summary>
+        public static readonly string[] Rules = new[]
+        {
+            "val:CoordinateSystemOriginOrTransformationExclusiveOptional\n    a sh:NodeShape ;\n    sh:message \"`CoordinateSystem` may have either an `Origin` or a `Transformation` but not both.\" ;\n    sh:targetClass mt:CoordinateSystem ;\n\n    sh:property [\n        sh:path mt:hasOrigin ;\n        sh:maxCount 1 ;\n        sh:class mt:Origin ;\n    ] ;\n\n    sh:property [\n        sh:path mt:hasTransformation ;\n        sh:maxCount 1 ;\n        sh:class mt:Transformation ;\n    ] ;\n    sh:sparql [\n        a sh:SPARQLConstraint ;\n        sh:select \"\"\"\n            SELECT $this\n            WHERE {\n                OPTIONAL { $this mt:hasOrigin ?origin . }\n                OPTIONAL { $this mt:hasTransformation ?trans . }\n                FILTER (BOUND(?origin) && BOUND(?trans))\n            }\n        \"\"\" ;\n    ] ."
+        };
+
 
         /// <summary>
         /// Natural language description of the CoordinateSystem.

@@ -15,6 +15,17 @@ namespace MTConnect.Devices
         /// </summary>
         public const string DescriptionText = "Component composed of a piece of equipment that produces observation about itself.";
 
+        /// <summary>
+        /// The OCL constraint bodies attached to this type in the source
+        /// SysML model, preserved verbatim so downstream consumers can
+        /// inspect the spec's raw validation rules at runtime.
+        /// </summary>
+        public static readonly string[] Rules = new[]
+        {
+            "Components::Devices::Device::allInstances()->iterate(device;devicecount:Real=0|\nif device.observes->size() >= 3\nthen \n    if device.observes->iterate(av;avail:Real=0|if av.oclAsType(DataItems::\"DataItem Types\"::Event).type = DataTypes::EventEnum::AVAILABILITY then avail+1 else avail+0 endif) = 1\n    then if device.observes->iterate(ac;assetc:Real=0|if ac.oclAsType(DataItems::\"DataItem Types\"::Event).type = DataTypes::EventEnum::ASSET_CHANGED then assetc+1 else assetc+0 endif) = 1\n        then if device.observes->iterate(ar;assetr:Real=0|if ar.oclAsType(DataItems::\"DataItem Types\"::Event).type = DataTypes::EventEnum::ASSET_REMOVED then assetr+1 else assetr+0 endif) = 1\n            then devicecount + 1\n            else devicecount + 0\n            endif\n        else devicecount + 0\n        endif\n    else devicecount + 0\n    endif\nelse devicecount + 0\nendif) = hasDevice->size()",
+            "Components::Devices::Device::allInstances()->iterate(device;devicecount:Real=0|\nif device.id->size() = 1 and \n    device.name->size() = 1 and\n    device.uuid->size() = 1 and\n    (device.observes->size() > 0 or device.hasReference->size() > 0 or device.hasComponent->size() > 0) \nthen\n    devicecount + 1\nelse\n    devicecount + 0\nendif\n) = Components::Devices::Device::allInstances()->size()"
+        };
+
 
         /// <summary>
         /// Condensed message digest from a secure one-way hash function. FIPS PUB 180-4

@@ -15,6 +15,16 @@ namespace MTConnect.Devices
         /// </summary>
         public const string DescriptionText = "Logical or physical entity that provides a capability.";
 
+        /// <summary>
+        /// The OCL constraint bodies attached to this type in the source
+        /// SysML model, preserved verbatim so downstream consumers can
+        /// inspect the spec's raw validation rules at runtime.
+        /// </summary>
+        public static readonly string[] Rules = new[]
+        {
+            "val:MustHaveComponentOrDataItemOrReference\n    a sh:NodeShape ;\n    sh:message \"`Component` **MUST** have at least one of `Component`, `DataItem` or  `Reference` entities.\" ;\n    sh:targetClass mt:Component ;\n    sh:or (\n        [ sh:property [\n            sh:path mt:hasComponent ;\n            sh:minCount 1 ;\n            sh:class mt:Component ;\n        ] ]\n        [ sh:property [\n            sh:path mt:observes ;\n            sh:minCount 1 ;\n            sh:class mt:DataItem ;\n        ] ]\n        [ sh:property [\n            sh:path mt:hasReference ;\n            sh:minCount 1 ;\n            sh:class mt:Reference ;\n        ] ]\n    ) ."
+        };
+
 
         /// <summary>
         /// Logical or physical entity that provides a capability.

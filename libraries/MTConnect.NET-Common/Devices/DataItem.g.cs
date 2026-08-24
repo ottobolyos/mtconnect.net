@@ -15,6 +15,17 @@ namespace MTConnect.Devices
         /// </summary>
         public const string DescriptionText = "Information reported about a piece of equipment.";
 
+        /// <summary>
+        /// The OCL constraint bodies attached to this type in the source
+        /// SysML model, preserved verbatim so downstream consumers can
+        /// inspect the spec's raw validation rules at runtime.
+        /// </summary>
+        public static readonly string[] Rules = new[]
+        {
+            "id->size() = 1 and\n(self.oclAsType(DataItems::\"DataItem Types\"::Event).type->size() = 1 or\nself.oclAsType(DataItems::\"DataItem Types\"::Sample).type->size() = 1 or\nself.oclAsType(DataItems::\"DataItem Types\"::Condition).type->size() = 1\n) and\n(self.oclAsType(DataItems::\"DataItem Types\"::Event).category->size() = 1 or\nself.oclAsType(DataItems::\"DataItem Types\"::Sample).category->size() = 1 or\nself.oclAsType(DataItems::\"DataItem Types\"::Condition).category->size() = 1\n)",
+            "self.oclAsType(DataItems::\"DataItem Types\"::Event).category = DataTypes::CategoryEnum::EVENT or \nself.oclAsType(DataItems::\"DataItem Types\"::Sample).category =  DataTypes::CategoryEnum::SAMPLE or\nself.oclAsType(DataItems::\"DataItem Types\"::Condition).category =  DataTypes::CategoryEnum::CONDITION"
+        };
+
 
         /// <summary>
         /// Specifies the kind of information provided by a data item.
