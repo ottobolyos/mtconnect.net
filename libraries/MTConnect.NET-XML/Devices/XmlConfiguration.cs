@@ -3,6 +3,7 @@
 
 using MTConnect.Devices.Configurations;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
@@ -146,7 +147,7 @@ namespace MTConnect.Devices.Xml
                 configuration.Specifications = specifications;
             }
 
-            // Vendor Extensions — every unrecognised child element captured by
+            // Vendor Extensions — every unrecognized child element captured by
             // [XmlAnyElement] projects to an XElement on the model. Elements are
             // preserved verbatim so downstream consumers see the exact
             // vendor-namespaced XML the operator authored.
@@ -157,7 +158,23 @@ namespace MTConnect.Devices.Xml
                 {
                     if (element != null)
                     {
-                        extensions.Add(XElement.Parse(element.OuterXml, LoadOptions.PreserveWhitespace));
+                        // Defense-in-depth against XML External Entity (XXE)
+                        // attacks: .NET 6+ already defaults XmlResolver to
+                        // null and disables DTD processing on the outer
+                        // document read (and a DOCTYPE cannot legally appear
+                        // inside a captured element's OuterXml), but pinning
+                        // both explicitly here mirrors the repo-wide
+                        // convention (see XmiDeserializer.FromXml) and
+                        // survives a future framework downgrade or
+                        // accidental restoration of XmlUrlResolver.
+                        var settings = new XmlReaderSettings
+                        {
+                            DtdProcessing = DtdProcessing.Prohibit,
+                            XmlResolver = null,
+                        };
+                        using var stringReader = new StringReader(element.OuterXml);
+                        using var xmlReader = XmlReader.Create(stringReader, settings);
+                        extensions.Add(XElement.Load(xmlReader, LoadOptions.PreserveWhitespace));
                     }
                 }
 
