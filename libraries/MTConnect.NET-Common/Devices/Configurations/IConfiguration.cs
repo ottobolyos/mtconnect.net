@@ -12,7 +12,7 @@ namespace MTConnect.Devices.Configurations
     /// itself defines vendor extension of a component's Configuration through the
     /// XSD substitution group <c>AbstractConfiguration</c> — see
     /// <c>MTConnectDevices_2.7.xsd</c> where <c>ComponentConfigurationType</c>
-    /// declares <c>&lt;xs:element ref="AbstractConfiguration" minOccurs="0"
+    /// declares <c>&lt;xs:element ref="AbstractConfiguration" minOccurs="1"
     /// maxOccurs="unbounded"/&gt;</c>, and every standard child (SensorConfiguration,
     /// Specifications, Relationships, CoordinateSystems, Motion, SolidModel,
     /// ImageFiles, PowerSources) is declared with
@@ -31,8 +31,8 @@ namespace MTConnect.Devices.Configurations
         /// element (see class-level remarks for the MTConnect XSD citation).
         /// The MTConnect.NET XML formatter writes each element verbatim inside
         /// the <c>&lt;Configuration&gt;</c> sequence, alongside any standard
-        /// children present on this instance; the deserialiser captures any
-        /// child element it does not recognise as a standard configuration
+        /// children present on this instance; the deserializer captures any
+        /// child element it does not recognize as a standard configuration
         /// child and adds it here. Strict XSD validation of the emitted
         /// document is the caller's responsibility and requires the vendor XSD
         /// to be loaded alongside the MTConnect schemas.

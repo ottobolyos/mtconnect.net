@@ -43,9 +43,9 @@ namespace MTConnect.Tests.XML.Devices.Configurations
     {
         // ---------------- positive: emit ----------------
 
-        /// <summary>Pins the behaviour expressed by the test name: single vendor extension serialises inside configuration element.</summary>
+        /// <summary>Pins the behavior expressed by the test name: single vendor extension serializes inside configuration element.</summary>
         [Test]
-        public void Single_vendor_extension_serialises_inside_Configuration_element()
+        public void Single_vendor_extension_serializes_inside_Configuration_element()
         {
             var configuration = new Configuration
             {
@@ -69,7 +69,7 @@ namespace MTConnect.Tests.XML.Devices.Configurations
             Assert.That(xml, Does.Contain("</mycorp:MyExtension>"));
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: multiple vendor extensions preserve order.</summary>
+        /// <summary>Pins the behavior expressed by the test name: multiple vendor extensions preserve order.</summary>
         [Test]
         public void Multiple_vendor_extensions_preserve_order()
         {
@@ -90,12 +90,12 @@ namespace MTConnect.Tests.XML.Devices.Configurations
 
             Assert.That(aIndex, Is.GreaterThanOrEqualTo(0), "First extension missing");
             Assert.That(bIndex, Is.GreaterThan(aIndex),
-                "Second extension must serialise after the first to preserve author order");
+                "Second extension must serialize after the first to preserve author order");
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: vendor extensions serialise alongside standard children.</summary>
+        /// <summary>Pins the behavior expressed by the test name: vendor extensions serialize alongside standard children.</summary>
         [Test]
-        public void Vendor_extensions_serialise_alongside_standard_children()
+        public void Vendor_extensions_serialize_alongside_standard_children()
         {
             var configuration = new Configuration
             {
@@ -121,9 +121,9 @@ namespace MTConnect.Tests.XML.Devices.Configurations
 
         // ---------------- positive: capture on read ----------------
 
-        /// <summary>Pins the behaviour expressed by the test name: unrecognised child element is captured as vendor extension.</summary>
+        /// <summary>Pins the behavior expressed by the test name: unrecognized child element is captured as vendor extension.</summary>
         [Test]
-        public void Unrecognised_child_element_is_captured_as_VendorExtension()
+        public void Unrecognized_child_element_is_captured_as_VendorExtension()
         {
             const string xml =
                 "<Configuration xmlns:mycorp=\"urn:mycorp:mtconnect\">"
@@ -141,7 +141,7 @@ namespace MTConnect.Tests.XML.Devices.Configurations
             Assert.That(extensions[0].Element("Payload")?.Value, Is.EqualTo("42"));
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: full round trip preserves vendor extension content.</summary>
+        /// <summary>Pins the behavior expressed by the test name: full round trip preserves vendor extension content.</summary>
         [Test]
         public void Full_round_trip_preserves_vendor_extension_content()
         {
@@ -176,7 +176,7 @@ namespace MTConnect.Tests.XML.Devices.Configurations
             Assert.That(foo.Value, Is.EqualTo("child-text"));
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: two vendor extensions round trip correctly.</summary>
+        /// <summary>Pins the behavior expressed by the test name: two vendor extensions round trip correctly.</summary>
         [Test]
         public void Two_vendor_extensions_round_trip_correctly()
         {
@@ -205,7 +205,7 @@ namespace MTConnect.Tests.XML.Devices.Configurations
 
         // ---------------- negative ----------------
 
-        /// <summary>Pins the behaviour expressed by the test name: null vendor extensions emits no extra child.</summary>
+        /// <summary>Pins the behavior expressed by the test name: null vendor extensions emits no extra child.</summary>
         [Test]
         public void Null_VendorExtensions_emits_no_extra_child()
         {
@@ -225,7 +225,7 @@ namespace MTConnect.Tests.XML.Devices.Configurations
                 Is.EqualTo("<Configuration />").Or.EqualTo("<Configuration></Configuration>"));
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: empty vendor extensions collection emits no extra child.</summary>
+        /// <summary>Pins the behavior expressed by the test name: empty vendor extensions collection emits no extra child.</summary>
         [Test]
         public void Empty_VendorExtensions_collection_emits_no_extra_child()
         {
@@ -245,14 +245,14 @@ namespace MTConnect.Tests.XML.Devices.Configurations
                 Is.EqualTo("<Configuration />").Or.EqualTo("<Configuration></Configuration>"));
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: configuration with only standard children has null vendor extensions on read.</summary>
+        /// <summary>Pins the behavior expressed by the test name: configuration with only standard children has null vendor extensions on read.</summary>
         [Test]
         public void Configuration_with_only_standard_children_has_null_VendorExtensions_on_read()
         {
             // A Configuration whose children are all standard ones bound to
             // strongly-typed slots must NOT accidentally capture them into
             // VendorExtensions — the [XmlAnyElement] attribute only fires on
-            // elements the deserialiser has not otherwise bound.
+            // elements the deserializer has not otherwise bound.
             const string xml =
                 "<Configuration>"
                 + "<Motion id=\"m1\" type=\"PRISMATIC\" actuation=\"DIRECT\">"
@@ -291,7 +291,7 @@ namespace MTConnect.Tests.XML.Devices.Configurations
             Assert.That(xml, Does.Contain("<a:First xmlns:a=\"urn:a\">one</a:First>"));
             Assert.That(xml, Does.Contain("<b:Second xmlns:b=\"urn:b\">two</b:Second>"));
             // Should be exactly two extension elements — the null slot is
-            // skipped, not serialised as an empty tag.
+            // skipped, not serialized as an empty tag.
             Assert.That(xml.Split("</a:First>").Length - 1, Is.EqualTo(1));
             Assert.That(xml.Split("</b:Second>").Length - 1, Is.EqualTo(1));
         }
@@ -428,7 +428,7 @@ namespace MTConnect.Tests.XML.Devices.Configurations
 
         /// <summary>Two vendor extensions from distinct vendor namespaces
         /// round-trip independently — each keeps its own namespace binding,
-        /// and the deserialiser distinguishes them by fully-qualified
+        /// and the deserializer distinguishes them by fully-qualified
         /// <see cref="XName"/> rather than by local name alone.</summary>
         [Test]
         public void Round_trip_preserves_distinct_vendor_namespaces()
