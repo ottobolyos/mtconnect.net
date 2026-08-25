@@ -18,33 +18,36 @@ namespace MTConnect
         private static Regex _streamRemoveNamespaceRegex = new Regex(@"\s{1}xmlns:xsi=\""http:\/\/www\.w3\.org\/2001\/XMLSchema-instance\""\s{1}xmlns:xsd=\""http:\/\/www\.w3\.org\/2001\/XMLSchema\""", RegexOptions.Compiled);
         private static Regex _streamNamespaceRegex = new Regex("<MTConnectStreams", RegexOptions.Compiled);
 
+        // XmlDocument.LoadXml delegates to an internal XmlReader whose
+        // DtdProcessing default varies across TFMs and whose XmlResolver
+        // historically resolved external entities. Route the parse through
+        // an explicit XmlReader with DTD processing prohibited and no
+        // resolver so unknown or hostile documents cannot exercise
+        // external-entity or entity-expansion (billion-laughs) paths.
+        // Shared/static so it isn't reallocated on every Get() call.
+        private static readonly XmlReaderSettings _namespaceReaderSettings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+        };
 
         public static string Get(string xml)
         {
             if (string.IsNullOrEmpty(xml)) return null;
 
-            // XmlDocument.LoadXml delegates to an internal XmlReader whose
-            // DtdProcessing default varies across TFMs and whose XmlResolver
-            // historically resolved external entities. Route the parse through
-            // an explicit XmlReader with DTD processing prohibited and no
-            // resolver so unknown or hostile documents cannot exercise
-            // external-entity or entity-expansion (billion-laughs) paths.
-            var settings = new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Prohibit,
-                XmlResolver = null,
-            };
-
             try
             {
                 using (var stringReader = new StringReader(xml))
-                using (var xmlReader = XmlReader.Create(stringReader, settings))
+                using (var xmlReader = XmlReader.Create(stringReader, _namespaceReaderSettings))
                 {
-                    var doc = new XmlDocument { XmlResolver = null };
-                    doc.Load(xmlReader);
-                    if (doc.DocumentElement != null)
+                    // Only the root start-tag's namespace is needed — advance
+                    // to it directly rather than materializing a full
+                    // XmlDocument DOM, which doubles the parse/allocation
+                    // cost for large payloads that get re-parsed for real
+                    // deserialization immediately afterwards anyway.
+                    if (xmlReader.MoveToContent() == XmlNodeType.Element)
                     {
-                        return doc.DocumentElement.NamespaceURI;
+                        return xmlReader.NamespaceURI;
                     }
                 }
             }
