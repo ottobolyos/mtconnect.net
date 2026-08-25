@@ -240,6 +240,17 @@ namespace MTConnect.Tests.XML
             Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
         }
 
+        /// <summary>Pins that a namespace containing non-ASCII characters (unicode combining marks, an RTL script run, and a surrogate-pair emoji) does not match any declared namespace constant and falls through to Max without throwing. Guards the string-equality dispatch chain against the unicode boundary class required by the coverage FLOOR.</summary>
+        /// <param name="ns">The unicode-bearing namespace under test.</param>
+        [TestCase("urn:mtconnect.org:MTConnectStréams:2.7")] // combining acute accent (é as e + U+0301)
+        [TestCase("urn:mtconnect.org:MTConnectStreams:2.7‏العربية")] // trailing RTL mark + Arabic run
+        [TestCase("urn:mtconnect.org:MTConnectStreams:2.7😀")] // trailing surrogate-pair emoji (U+1F600)
+        public void GetByNamespace_unicode_namespace_defaults_to_Max(string ns)
+        {
+            var actual = MTConnectVersion.GetByNamespace(ns);
+            Assert.That(actual, Is.EqualTo(MTConnectVersions.Max));
+        }
+
         /// <summary>Pins the public <see cref="MTConnectVersion.Get(string)"/> entry point: a well-formed XML document declaring a canonical MTConnect namespace resolves through <c>Namespaces.Get</c> to the matching version. Exercises the full public-API surface of the class, not just the <c>GetByNamespace</c> internal.</summary>
         /// <param name="xmlNamespace">The namespace URI to embed as the root element's default namespace.</param>
         /// <param name="expected">The version <paramref name="xmlNamespace"/> must resolve to.</param>
