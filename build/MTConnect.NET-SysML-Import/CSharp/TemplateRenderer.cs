@@ -306,6 +306,15 @@ namespace MTConnect.SysML.CSharp
                         // so its `Code` property hides Measurement.Code and needs `new`.
                         MarkInheritedProperties(templates, classModels);
 
+                        // Mark each ClassModel's ParentHasRules flag so Model.scriban
+                        // emits the `new` modifier on the generated Rules[] field only
+                        // when an ancestor actually declares Rules. Parent presence
+                        // alone is not sufficient — e.g. Axis extends AbstractAxis, but
+                        // AbstractAxis has no Rules, so `new` on Axis.Rules would hide
+                        // nothing and raise CS0109 ("does not hide an accessible
+                        // member"). See ClassModel.ParentHasRules XML doc.
+                        MarkParentHasRules(templates, classModels);
+
 
                         foreach (var template in templates)
                         {
@@ -697,6 +706,82 @@ namespace MTConnect.SysML.CSharp
                         property.IsInherited = true;
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Marks each <see cref="ClassModel.ParentHasRules"/> flag by walking
+        /// the <see cref="MTConnectClassModel.ParentName"/> ancestor chain and
+        /// checking whether any ancestor declares a non-empty
+        /// <see cref="MTConnectClassModel.Rules"/> array. <c>Model.scriban</c>
+        /// uses the flag to decide whether the generated <c>Rules</c> field
+        /// needs the <c>new</c> modifier — mere parent presence is not
+        /// sufficient, since a class can extend a parent that itself carries
+        /// no <c>Rules</c> (e.g. <c>Axis : AbstractAxis</c>, where
+        /// <c>AbstractAxis</c> has no <c>Rules</c>). Emitting <c>new</c> in
+        /// that case hides nothing and the compiler raises CS0109.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately independent of <see cref="MarkInheritedProperties"/>
+        /// rather than folded into its walk: that method's per-class loop
+        /// starts with <c>if (!HasAnyProperties(template)) continue;</c>,
+        /// which would skip the Rules-ancestor check for any class that
+        /// declares Rules but no Properties. Keeping the walk separate — at
+        /// the cost of rebuilding the byId/byName lookup tables — avoids
+        /// that guard clause entirely so every ClassModel with a parent gets
+        /// checked regardless of its own property count.
+        /// </remarks>
+        private static void MarkParentHasRules(
+            List<ITemplateModel> templates,
+            IEnumerable<MTConnectClassModel> importClassModels)
+        {
+            if (templates == null) return;
+
+            var classTemplates = templates.OfType<MTConnectClassModel>().ToList();
+            if (classTemplates.Count == 0) return;
+
+            var byId = new Dictionary<string, MTConnectClassModel>(StringComparer.Ordinal);
+            var byName = new Dictionary<string, MTConnectClassModel>(StringComparer.Ordinal);
+            foreach (var ct in classTemplates)
+            {
+                if (!string.IsNullOrEmpty(ct.Id)) byId.TryAdd(ct.Id, ct);
+                if (!string.IsNullOrEmpty(ct.Name)) byName.TryAdd(ct.Name, ct);
+            }
+            if (importClassModels != null)
+            {
+                foreach (var cm in importClassModels)
+                {
+                    if (cm == null) continue;
+                    if (!string.IsNullOrEmpty(cm.Id)) byId.TryAdd(cm.Id, cm);
+                    if (!string.IsNullOrEmpty(cm.Name)) byName.TryAdd(cm.Name, cm);
+                }
+            }
+
+            foreach (var template in classTemplates)
+            {
+                if (template is not ClassModel classModel) continue;
+                if (string.IsNullOrEmpty(template.ParentName)) continue;
+
+                var visited = new HashSet<string>(StringComparer.Ordinal);
+                var currentId = template.Id;
+                var parentName = template.ParentName;
+                var parentHasRules = false;
+
+                while (!string.IsNullOrEmpty(parentName))
+                {
+                    var parent = ResolveParent(currentId, parentName, byId, byName);
+                    if (parent == null) break;
+                    if (!visited.Add(parent.Id ?? parentName)) break;
+                    if (parent.Rules != null && parent.Rules.Length > 0)
+                    {
+                        parentHasRules = true;
+                        break;
+                    }
+                    currentId = parent.Id;
+                    parentName = parent.ParentName;
+                }
+
+                classModel.ParentHasRules = parentHasRules;
             }
         }
 
