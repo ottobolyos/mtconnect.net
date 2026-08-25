@@ -58,12 +58,14 @@ public class RouteCheckTests
     /// cost trivial while still ringing the door bell ~5x per second.</summary>
     private const int ServerReadyPollMs = 200;
 
-    /// <summary>Hard deadline for the preview-server bind. 60 s
-    /// accommodates a cold CI runner where `npm ci` + `vitepress build`
-    /// + vitepress startup land before the first port probe — anything
-    /// past that is a real failure (dist/ missing, port collision,
-    /// vitepress CLI usage error) worth surfacing as a TimeoutException
-    /// with the drained startup log.</summary>
+    /// <summary>Hard deadline for the preview-server bind. `npm ci` and
+    /// `vitepress build` are earlier, sequential <c>OneTimeSetUp</c>
+    /// stages that already ran to completion before this countdown
+    /// starts (see <see cref="RunVitepressBuild"/>), so 60 s covers only
+    /// vitepress preview's own startup — anything past that is a real
+    /// failure (dist/ missing, port collision, vitepress CLI usage
+    /// error) worth surfacing as a TimeoutException with the drained
+    /// startup log.</summary>
     private const int ServerReadyTimeoutMs = 60_000;
 
     /// <summary>Hard deadline for the vitepress build spawned by
@@ -75,6 +77,15 @@ public class RouteCheckTests
     /// drained output rather than a wall-clock CI timeout that
     /// discards the diagnostic.</summary>
     private const int VitepressBuildTimeoutMs = 20 * 60 * 1000;
+
+    /// <summary>Hard deadline for `npm ci`, spawned by
+    /// <see cref="RunNpm"/> when <c>docs/node_modules</c> is absent. 10
+    /// minutes bounds a cold registry fetch on a slow runner; anything
+    /// past that implies a hang (registry outage, interactive prompt,
+    /// corrupt lockfile) worth surfacing as an InvalidOperationException
+    /// with the drained output rather than hanging OneTimeSetUp
+    /// indefinitely with no diagnostic.</summary>
+    private const int NpmTimeoutMs = 10 * 60 * 1000;
 
     /// <summary>Per-page navigation timeout. 30 s covers a slow runner
     /// with a cold network cache; anything past that is a real failure
@@ -898,50 +909,7 @@ public class RouteCheckTests
         psi.ArgumentList.Add(vitepressEntry);
         psi.ArgumentList.Add("build");
 
-        // `using` on Process guarantees the OS handle + redirected
-        // pipes are released even when the drain/wait/exit-code path
-        // throws — a warm test-runner otherwise accumulates handles
-        // and can starve pipes across reruns.
-        using var proc = Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start `node … vitepress build` process");
-
-        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-        var stderrTask = proc.StandardError.ReadToEndAsync();
-
-        // Bound the child wait so a wedged vitepress (deadlocked
-        // Vue-SSR worker, hung fetch, infinite HMR loop) surfaces as
-        // an actionable exception with the drained partial output
-        // rather than a wall-clock CI timeout that discards it.
-        if (!proc.WaitForExit(VitepressBuildTimeoutMs))
-        {
-            try
-            {
-                proc.Kill(entireProcessTree: true);
-            }
-            catch
-            {
-                // Best-effort — the child may already be exiting; a
-                // failure to signal is not itself the diagnostic.
-            }
-            // Give the drains one last chance to complete after the
-            // kill; ignore any fault so the timeout message is what
-            // the caller sees.
-            try { Task.WaitAll(new[] { stdoutTask, stderrTask }, millisecondsTimeout: 2_000); } catch { }
-            var partialStdout = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : "<drain incomplete>";
-            var partialStderr = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : "<drain incomplete>";
-            throw new InvalidOperationException(
-                $"`node … vitepress.js build` did not exit within {VitepressBuildTimeoutMs} ms — killed the child tree and captured what stdout/stderr had been drained.{Environment.NewLine}stdout:{Environment.NewLine}{partialStdout}{Environment.NewLine}stderr:{Environment.NewLine}{partialStderr}");
-        }
-
-        Task.WaitAll(stdoutTask, stderrTask);
-        var stdout = stdoutTask.Result;
-        var stderr = stderrTask.Result;
-
-        if (proc.ExitCode != 0)
-        {
-            throw new InvalidOperationException(
-                $"`node … vitepress.js build` exited {proc.ExitCode}{Environment.NewLine}stdout:{Environment.NewLine}{stdout}{Environment.NewLine}stderr:{Environment.NewLine}{stderr}");
-        }
+        RunProcess(psi, VitepressBuildTimeoutMs, "`node … vitepress.js build`");
     }
 
     private static void RunNpm(string arguments, string workingDirectory)
@@ -963,25 +931,95 @@ public class RouteCheckTests
             psi.ArgumentList.Add(token);
         }
 
-        var proc = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start `npm {arguments}`");
+        RunProcess(psi, NpmTimeoutMs, $"`npm {arguments}`");
+    }
 
-        // Drain both pipes concurrently so the child doesn't block on a
-        // full stderr buffer while the parent waits on stdout — the
-        // classic pipe-deadlock pattern. `npm ci` emits stderr volume in
-        // the form of deprecation warnings and peer-dep notices that on a
-        // verbose run can exceed the OS pipe buffer (typically 64 KB).
+    /// <summary>
+    /// Spawn <paramref name="psi"/>, drain stdout/stderr concurrently to
+    /// avoid the classic pipe-deadlock pattern, bound the wait by
+    /// <paramref name="timeoutMs"/> so a wedged child surfaces as an
+    /// actionable exception rather than a wall-clock CI timeout that
+    /// discards the diagnostic, and rethrow with the captured output on
+    /// either a timeout (after killing the child tree) or a non-zero
+    /// exit code. Shared by <see cref="RunVitepressBuild"/> and
+    /// <see cref="RunNpm"/> so both child-process launches get the same
+    /// dispose/timeout/kill hardening rather than diverging over time.
+    /// </summary>
+    /// <param name="psi">Fully configured start info; stdout/stderr must
+    /// already be redirected.</param>
+    /// <param name="timeoutMs">Hard wait deadline in milliseconds.</param>
+    /// <param name="label">Human-readable command label used in
+    /// exception messages (e.g. <c>`npm ci`</c>).</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="Process.Start(ProcessStartInfo)"/> returns
+    /// <see langword="null"/>, the child fails to exit within
+    /// <paramref name="timeoutMs"/> milliseconds (the child tree is
+    /// killed before the exception is thrown), or the child process
+    /// exits with a non-zero code. The captured stdout and stderr are
+    /// appended to the exception message in every failure mode for
+    /// diagnosis.
+    /// </exception>
+    private static void RunProcess(ProcessStartInfo psi, int timeoutMs, string label)
+    {
+        // `using` guarantees the OS handle + redirected pipes are
+        // released even when the drain/wait/exit-code path throws — a
+        // warm test-runner otherwise accumulates handles and can starve
+        // pipes across reruns.
+        using var proc = Process.Start(psi)
+            ?? throw new InvalidOperationException($"Failed to start {label}");
+
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
         var stderrTask = proc.StandardError.ReadToEndAsync();
+
+        // Bound the child wait so a wedged process (deadlocked worker,
+        // hung fetch, interactive prompt, infinite loop) surfaces as an
+        // actionable exception with the drained partial output rather
+        // than a wall-clock CI timeout that discards it.
+        if (!proc.WaitForExit(timeoutMs))
+        {
+            try
+            {
+                proc.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // Best-effort — the child may already be exiting; a
+                // failure to signal is not itself the diagnostic.
+            }
+            // Give the drains one last chance to complete after the
+            // kill; ignore any fault so the timeout message is what
+            // the caller sees.
+            try { Task.WaitAll(new[] { stdoutTask, stderrTask }, millisecondsTimeout: 2_000); } catch { }
+            var partialStdout = stdoutTask.IsCompletedSuccessfully ? SanitizeForException(stdoutTask.Result) : "<drain incomplete>";
+            var partialStderr = stderrTask.IsCompletedSuccessfully ? SanitizeForException(stderrTask.Result) : "<drain incomplete>";
+            throw new InvalidOperationException(
+                $"{label} did not exit within {timeoutMs} ms — killed the child tree and captured what stdout/stderr had been drained.{Environment.NewLine}stdout:{Environment.NewLine}{partialStdout}{Environment.NewLine}stderr:{Environment.NewLine}{partialStderr}");
+        }
+
         Task.WaitAll(stdoutTask, stderrTask);
-        var stdout = stdoutTask.Result;
-        var stderr = stderrTask.Result;
-        proc.WaitForExit();
+        var stdout = SanitizeForException(stdoutTask.Result);
+        var stderr = SanitizeForException(stderrTask.Result);
 
         if (proc.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"`npm {arguments}` exited {proc.ExitCode}{Environment.NewLine}stdout:{Environment.NewLine}{stdout}{Environment.NewLine}stderr:{Environment.NewLine}{stderr}");
+                $"{label} exited {proc.ExitCode}{Environment.NewLine}stdout:{Environment.NewLine}{stdout}{Environment.NewLine}stderr:{Environment.NewLine}{stderr}");
         }
+    }
+
+    /// <summary>
+    /// Strip ASCII control characters (other than newline/carriage
+    /// return/tab) from captured child-process output before it is
+    /// interpolated into an exception message. A compromised or
+    /// misbehaving npm dependency could otherwise emit control
+    /// sequences that spoof adjacent lines in aggregated CI log
+    /// viewers; this keeps the diagnostic text inert.
+    /// </summary>
+    /// <param name="text">Raw captured stdout or stderr.</param>
+    /// <returns><paramref name="text"/> with disallowed control
+    /// characters removed.</returns>
+    private static string SanitizeForException(string text)
+    {
+        return new string(text.Where(c => !char.IsControl(c) || c is '\n' or '\r' or '\t').ToArray());
     }
 }
