@@ -20,7 +20,7 @@ namespace MTConnect.Devices.Configurations
         /// SysML model, preserved verbatim so downstream consumers can
         /// inspect the spec's raw validation rules at runtime.
         /// </summary>
-        public new static readonly string[] Rules = new[]
+        public static readonly string[] Rules = new[]
         {
             "val:AxisValueMustBeUnitVector\n    a sh:NodeShape ;\n    sh:message \"Axis value must be a unit vector.\" ;\n    sh:targetClass mt:Axis ;\n    sh:sparql [\n        a sh:SPARQLConstraint ;\n        sh:message \"'value' property must form a unit vector: sqrt(x^2 + y^2 + z^2) = 1.\" ;\n        sh:select \"\"\"\n            SELECT $this\n            WHERE {\n                $this mt:value ?vec .\n                ?vec mt:x ?x ; mt:y ?y ; mt:z ?z .\n                FILTER ( ABS( SQRT((?x*?x) + (?y*?y) + (?z*?z)) - 1.0 ) > 1e-6 )\n            }\n        \"\"\" ;\n    ] .\n"
         };
