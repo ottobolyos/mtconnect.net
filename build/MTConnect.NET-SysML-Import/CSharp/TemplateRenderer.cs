@@ -300,11 +300,10 @@ namespace MTConnect.SysML.CSharp
                         //
                         // The full import-side classModels list is passed too so the
                         // walk can find parents that are present in the SysML graph but
-                        // never reach `templates` (e.g. `Assets.CuttingTools.Measurement`,
-                        // an abstract base whose .g.cs is hand-maintained / frozen and
-                        // therefore not re-emitted by any current renderer flow). The
-                        // child ToolingMeasurement still extends it at C# compile time,
-                        // so its `Code` property hides Measurement.Code and needs `new`.
+                        // never reach `templates` (e.g. abstract bases whose .g.cs is
+                        // hand-maintained / frozen and therefore not re-emitted by any
+                        // current renderer flow) — the child class still extends them at
+                        // C# compile time, so any name collision needs the `new` marker.
                         MarkInheritedProperties(templates, classModels);
 
                         // Mark each ClassModel's ParentHasRules flag so Model.scriban
@@ -500,7 +499,7 @@ namespace MTConnect.SysML.CSharp
         ///     <see cref="MTConnectClassModel.ParentName"/> through every
         ///     ClassModel the renderer has assembled. This catches the
         ///     overwhelming majority of cases (Asset.SerialNumber ⇒
-        ///     CuttingToolAsset, Measurement.Code ⇒ ToolingMeasurement, etc.).
+        ///     CuttingToolAsset, Component.Uuid ⇒ Device, etc.).
         ///   </item>
         ///   <item>
         ///     Hand-stitched seeds for inheritance links the SysML model does
@@ -652,19 +651,25 @@ namespace MTConnect.SysML.CSharp
                         break;
 
                     case "Assets.CuttingTools.ToolingMeasurement":
-                        // No hand-stitched inheritance seed needed. The
-                        // Assets.CuttingTools.Measurement base IS produced
-                        // by the current renderer flow (via
-                        // MTConnectAssetInformationModel.ParseAssetInformationModel's
-                        // sharedMeasurement injection which imports the
-                        // Pallet Measurement class under Assets.CuttingTools),
-                        // so the export-side ClassModel graph already carries
-                        // its property list. The Pallet Measurement lacks
-                        // Code, and the interface IMeasurement.g.cs likewise
-                        // has Code commented out — hence emitting `new` on
-                        // ToolingMeasurement.Code would raise CS0109 on both
-                        // the class and interface sides. Fall through to the
-                        // default inheritance walk with no override.
+                        // ToolingMeasurement extends `Measurement` (the
+                        // CuttingTools abstract Measurement base, NOT
+                        // Assets.Pallet.Measurement). The SysML v2.7 XMI
+                        // relocates `Code` onto ToolingMeasurement — the
+                        // parent Measurement (both class and interface)
+                        // no longer declares Code, so ToolingMeasurement's
+                        // `Code` is a fresh introduction that hides
+                        // nothing. Emitting `new` here would raise CS0109
+                        // on both the class and the interface. No hand-
+                        // stitched inheritance seed is needed for this
+                        // template — leave the case block as a marker so
+                        // the intentional emptiness is documented. The
+                        // Assets.CuttingTools.Measurement base is emitted
+                        // by the current renderer flow via the
+                        // sharedMeasurement injection in
+                        // MTConnectAssetInformationModel, so the export-
+                        // side ClassModel graph carries its property list
+                        // and the default inheritance walk resolves
+                        // correctly.
                         break;
                 }
 

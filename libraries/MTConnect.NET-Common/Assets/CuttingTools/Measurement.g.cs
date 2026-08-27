@@ -20,37 +20,31 @@ namespace MTConnect.Assets.CuttingTools
         /// Maximum value for the measurement.
         /// </summary>
         public double? Maximum { get; set; }
-        
 
         /// <summary>
         /// Minimum value for the measurement.
         /// </summary>
         public double? Minimum { get; set; }
-        
 
         /// <summary>
         /// NativeUnits.
         /// </summary>
         public string NativeUnits { get; set; }
-        
 
         /// <summary>
         /// As advertised value for the measurement.
         /// </summary>
         public double? Nominal { get; set; }
-        
 
         /// <summary>
         /// Number of significant digits in the reported value.
         /// </summary>
         public int? SignificantDigits { get; set; }
-        
 
         /// <summary>
         /// Units.
         /// </summary>
         public string Units { get; set; }
-        
 
         /// <summary>
         /// 
