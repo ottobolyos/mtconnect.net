@@ -53,12 +53,12 @@ test('parseOptions: --output defaults to <repo>/build/output/sbom', () => {
   assert.ok(o.output.endsWith('/build/output/sbom'), o.output);
 });
 
-test('parseOptions: --input override honoured', () => {
+test('parseOptions: --input override honored', () => {
   const o = parseOptions(['--nuget', '--input', '/tmp/nupkg']);
   assert.equal(o.input, '/tmp/nupkg');
 });
 
-test('parseOptions: --output override honoured', () => {
+test('parseOptions: --output override honored', () => {
   const o = parseOptions(['--nuget', '--output', '/tmp/sbom']);
   assert.equal(o.output, '/tmp/sbom');
 });

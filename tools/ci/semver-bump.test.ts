@@ -212,7 +212,7 @@ test('isStableCutMarker: other chore(release) messages rejected', () => {
 });
 
 test('isStableCutMarker: whitespace-trimmed', () => {
-  // Docstring: "Case-sensitive on the marker itself". Trim behaviour
+  // Docstring: "Case-sensitive on the marker itself". Trim behavior
   // is implicit via `subject.trim()` — pin so a future refactor that
   // drops the trim does not silently break real squash-merge subjects.
   assert.equal(isStableCutMarker('  chore(release): publish new stable\n'), true);

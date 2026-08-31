@@ -2,7 +2,7 @@
 /**
  * Unit tests for the pure helpers exported by `docker-build.ts`. The
  * spawning half (`main` shelling out to `docker buildx`) is out of
- * scope for a pure-unit suite — its behaviour is covered by the
+ * scope for a pure-unit suite — its behavior is covered by the
  * integration matrix that runs `--dry-run` end-to-end. Run with:
  *
  *   tsx tools/release/docker-build.test.ts
@@ -57,7 +57,7 @@ test('parseOptions: missing --version throws', () => {
   );
 });
 
-test('parseOptions: unrecognised --platform throws with the offending value', () => {
+test('parseOptions: unrecognized --platform throws with the offending value', () => {
   assert.throws(
     () => parseOptions(['--version', '1.0.0', '--platform', 'darwin/arm64']),
     /darwin\/arm64/,

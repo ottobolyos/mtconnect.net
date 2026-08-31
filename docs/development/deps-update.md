@@ -31,7 +31,7 @@ younger than `env.MIN_AGE_DAYS` (default seven) days is accepted:
 - **NuGet packages** — **no quarantine**. `dotnet-outdated` has no
   built-in age filter, so a hot-published bad NuGet release will land
   in the weekly PR unfiltered; downstream CI + reviewer eyes are the
-  only line of defence. A proper NuGet quarantine is tracked in
+  only line of defense. A proper NuGet quarantine is tracked in
   issue [#237](https://github.com/TrakHound/MTConnect.NET/issues/237).
 
 The invariant catches the standard OSS "poisoned publish yanked

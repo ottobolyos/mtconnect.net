@@ -77,7 +77,7 @@ export const main = async (argv: string[]): Promise<void> => {
   // key never appears there, so a wrapper like our `renderCmd()`
   // (or an inspection of the parent's argv on the runner) cannot
   // leak it. shell.ts's SECRET_ARG_NAMES redaction covers the CI
-  // log line as a second line of defence.
+  // log line as a second line of defense.
   for (const pkg of packages) {
     const path = resolve(opts.input, pkg);
     const cmdParts = [

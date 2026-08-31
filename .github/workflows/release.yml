@@ -33,7 +33,7 @@ permissions:
 
 concurrency:
   # Only one release run at a time on `master`. A rapid succession of
-  # merges collapses into the latest push; older runs are cancelled so
+  # merges collapses into the latest push; older runs are canceled so
   # they cannot race the newer one to nuget.org.
   group: release-${{ github.ref }}
   cancel-in-progress: true
@@ -427,7 +427,7 @@ jobs:
   # `publish-docker` is intentionally absent — the docker push happens
   # inside `docker-amd64` and `docker-arm64` (per-arch) and the merge
   # inside `docker-manifest`. Consolidating into a single "publish"
-  # step would either force serialised builds or duplicate the
+  # step would either force serialized builds or duplicate the
   # per-arch build. See CI-log tail on failure for the split cause.
   # ----------------------------------------------------------------
 

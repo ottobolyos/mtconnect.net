@@ -36,7 +36,7 @@ permissions:
 
 concurrency:
   # A rapid succession of pushes to the PR head collapses into the
-  # latest one; older commitlint + tools-test runs are cancelled.
+  # latest one; older commitlint + tools-test runs are canceled.
   group: pre-merge-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 

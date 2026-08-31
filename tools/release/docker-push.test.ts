@@ -34,7 +34,7 @@ test('parseOptions: per-arch push — platform set, manifest false', () => {
   assert.equal(o.dryRun, false);
 });
 
-test('parseOptions: per-arch push honours --image override', () => {
+test('parseOptions: per-arch push honors --image override', () => {
   const o = parseOptions([
     '--version', '1.0.0',
     '--platform', 'linux/arm64',
@@ -85,7 +85,7 @@ test('parseOptions: --platform and --manifest are mutually exclusive', () => {
   );
 });
 
-test('parseOptions: unrecognised --platform throws', () => {
+test('parseOptions: unrecognized --platform throws', () => {
   assert.throws(
     () => parseOptions(['--version', '1.0.0', '--platform', 'linux/riscv64']),
     /linux\/amd64 or linux\/arm64/,

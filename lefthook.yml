@@ -6,7 +6,7 @@
 #   `commitlint.config.mjs`. Runs on every `git commit` (except an
 #   amend that leaves the subject untouched); a violation blocks the
 #   commit locally so the pre-merge CI gate is the second line of
-#   defence, not the only one.
+#   defense, not the only one.
 #
 #   pre-commit — run `dotnet format whitespace` on any staged C# or
 #   csproj file. `stage_fixed: true` re-stages the formatter's

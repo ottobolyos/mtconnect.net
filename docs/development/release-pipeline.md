@@ -9,7 +9,7 @@ production.
 ## Trigger
 
 Push to `master`. Every merged PR fires the workflow exactly once,
-serialised by a `concurrency` group so a rapid succession of merges
+serialized by a `concurrency` group so a rapid succession of merges
 collapses into the latest push and cancels any in-flight prior run.
 
 ## Jobs

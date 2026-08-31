@@ -200,8 +200,8 @@ test('parseDryRun: multiple --dry-run flags remain truthy, none leak into rest',
   assert.deepEqual(r.rest, ['--x']);
 });
 
-test('parseDryRun: --dry-run=true is NOT recognised (equality-only match)', () => {
-  // Documented behaviour — the parser is `arg === '--dry-run'`, not
+test('parseDryRun: --dry-run=true is NOT recognized (equality-only match)', () => {
+  // Documented behavior — the parser is `arg === '--dry-run'`, not
   // `.startsWith`. `--dry-run=true` therefore lands in `rest` and
   // `parseArgs` downstream will accept it separately if declared.
   // Pin the current shape so a future author does not loosen it.

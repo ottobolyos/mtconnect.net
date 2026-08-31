@@ -2,7 +2,7 @@
 /**
  * Generate SPDX SBOMs for the release artefacts.
  *
- * Two flavours in one script:
+ * Two flavors in one script:
  *   1. `--nuget` — invokes `dotnet sbom-tool generate` against the
  *      built .nupkg output so each package ships an in-tree SBOM
  *      alongside its manifest. The tool is expected to be installed
