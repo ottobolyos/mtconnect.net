@@ -177,7 +177,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
 
 #if NET5_0_OR_GREATER
 #pragma warning disable SYSLIB0039 // TLS 1.0 / 1.1 enum members are obsolete; the resolver validates strings, we merely pin the resulting bitmask.
-        /// <summary>Pins the deprecated-protocol acceptance behaviour. The resolver validates against defined enum members only; it does NOT refuse deprecated members (Tls, Tls11) if the user explicitly opts in. A follow-up may add a downgrade-warning log, but the current contract is 'user opts in, resolver honours' - this test pins that so a future change requires an explicit test edit.</summary>
+        /// <summary>Pins the deprecated-protocol acceptance behavior. The resolver validates against defined enum members only; it does NOT refuse deprecated members (Tls, Tls11) if the user explicitly opts in. A follow-up may add a downgrade-warning log, but the current contract is 'user opts in, resolver honors' - this test pins that so a future change requires an explicit test edit.</summary>
         [Test]
         public void Deprecated_Tls10_accepted_when_defined_on_runtime()
         {
@@ -201,7 +201,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
                 "Pin: deprecated Tls1.0 is accepted by the resolver on runtimes that still define it. The resolver does NOT downgrade-guard; a follow-up may add a warning.");
         }
 
-        /// <summary>Pins the deprecated-protocol acceptance behaviour for Tls11 (see Tls10 test above for rationale).</summary>
+        /// <summary>Pins the deprecated-protocol acceptance behavior for Tls11 (see Tls10 test above for rationale).</summary>
         [Test]
         public void Deprecated_Tls11_accepted_when_defined_on_runtime()
         {
@@ -225,7 +225,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
 
         /// <summary>Pins the enum-arm-exhaustiveness contract for Ssl3. The resolver refuses names that the running framework does not expose. On .NET 5+ SslProtocols.Ssl3 is [Obsolete] and may not be a defined member; either way the assertion holds because the failure mode surfaces via MqttRelayConfigurationException.</summary>
         [Test]
-        public void Ssl3_behaviour_pinned_against_runtime_definition()
+        public void Ssl3_behavior_pinned_against_runtime_definition()
         {
             var ssl3Defined = Enum.GetNames(typeof(SslProtocols))
                 .Contains("Ssl3", StringComparer.OrdinalIgnoreCase);
@@ -238,7 +238,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
             }
 
             // If defined, the resolver accepts it (the current contract
-            // is 'user opts in, resolver honours'). Pin that so a future
+            // is 'user opts in, resolver honors'). Pin that so a future
             // downgrade-guard requires an explicit test edit.
             var resolved = MqttRelayTlsProtocolResolver.Resolve(new List<string> { "Ssl3" });
             Assert.That(resolved, Is.Not.EqualTo(SslProtocols.None),

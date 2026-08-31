@@ -38,7 +38,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
     [TestFixture]
     public class MqttRelayTlsOptionsBuilderTests
     {
-        /// <summary>Pins the behaviour: no Tls object and no UseTls flag returns null so the caller skips WithTlsOptions.</summary>
+        /// <summary>Pins the behavior: no Tls object and no UseTls flag returns null so the caller skips WithTlsOptions.</summary>
         [Test]
         public void Build_returns_null_when_UseTls_false_and_Tls_null()
         {
@@ -316,7 +316,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
 
         /// <summary>Pins the OmitCAValidation=true branch: even when a client cert is loaded and validation is disabled, options build without a CA cert added and the flag surface still lands.</summary>
         [Test]
-        public void Build_honours_OmitCAValidation_true_when_client_cert_present()
+        public void Build_honors_OmitCAValidation_true_when_client_cert_present()
         {
             const string password = "test-pw-omit";
             _tempPfxPath = CreateTempSelfSignedPfx(password);

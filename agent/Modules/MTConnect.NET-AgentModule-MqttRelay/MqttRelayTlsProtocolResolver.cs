@@ -97,7 +97,7 @@ namespace MTConnect
 
                 // Enum.TryParse<T> resolves identically across every
                 // TFM this project targets (net461 → net8.0) so a
-                // per-TFM #if split adds no behaviour and only invites
+                // per-TFM #if split adds no behavior and only invites
                 // one branch to drift from the other.
                 if (!Enum.TryParse<SslProtocols>(trimmed, ignoreCase: true, out var parsed)
                     || !Enum.IsDefined(typeof(SslProtocols), parsed))
@@ -153,7 +153,7 @@ namespace MTConnect
     public class MqttRelayConfigurationException : Exception
     {
         /// <summary>
-        /// Initialises a new instance with the supplied message.
+        /// Initializes a new instance with the supplied message.
         /// </summary>
         /// <param name="message">Human-readable diagnostic that
         /// identifies the misconfigured field and describes the
@@ -164,7 +164,7 @@ namespace MTConnect
         }
 
         /// <summary>
-        /// Initialises a new instance with the supplied message and
+        /// Initializes a new instance with the supplied message and
         /// inner exception.
         /// </summary>
         /// <param name="message">Human-readable diagnostic that

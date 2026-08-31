@@ -16,7 +16,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
     /// <c>AgentApplicationConfiguration.GetConfiguration</c> uses
     /// YamlDotNet with the camelCase naming convention; these tests
     /// reproduce that binder shape so a future contributor cannot
-    /// change the serialised name (<c>sslProtocols</c>) or the
+    /// change the serialized name (<c>sslProtocols</c>) or the
     /// list-of-strings representation without breaking a pinned test.
     /// </summary>
     [TestFixture]
@@ -48,9 +48,9 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
             CollectionAssert.AreEqual(original.SslProtocols, roundTripped.SslProtocols);
         }
 
-        /// <summary>Pins the serialised field name: the property surfaces as camelCase 'sslProtocols' in YAML - the shape the module-configuration binder expects.</summary>
+        /// <summary>Pins the serialized field name: the property surfaces as camelCase 'sslProtocols' in YAML - the shape the module-configuration binder expects.</summary>
         [Test]
-        public void SslProtocols_serialises_as_camelCase_field_name()
+        public void SslProtocols_serializes_as_camelCase_field_name()
         {
             var configuration = new MqttRelayModuleConfiguration();
             var (serializer, _) = BuildBinderPair();
@@ -58,12 +58,12 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
             var yaml = serializer.Serialize(configuration);
 
             Assert.That(yaml, Does.Contain("sslProtocols:"),
-                "The binder uses camelCase; the field name must serialise as 'sslProtocols'.");
+                "The binder uses camelCase; the field name must serialize as 'sslProtocols'.");
         }
 
-        /// <summary>Pins that a user-authored YAML list of protocol names deserialises correctly and is unchanged from the input.</summary>
+        /// <summary>Pins that a user-authored YAML list of protocol names deserializes correctly and is unchanged from the input.</summary>
         [Test]
-        public void User_authored_yaml_list_deserialises_to_expected_string_list()
+        public void User_authored_yaml_list_deserializes_to_expected_string_list()
         {
             var (_, deserializer) = BuildBinderPair();
             var yaml = "sslProtocols:\n  - Tls12\n  - Tls13\n";
@@ -90,7 +90,7 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
             Assert.That(roundTripped.SslProtocols.Single(), Is.EqualTo("Tls13"));
         }
 
-        /// <summary>Pins the UseTls YAML round-trip: the module-level opt-in flag survives serialise-then-deserialise so a user cannot accidentally lose their TLS opt-in through the binder.</summary>
+        /// <summary>Pins the UseTls YAML round-trip: the module-level opt-in flag survives serialize-then-deserialize so a user cannot accidentally lose their TLS opt-in through the binder.</summary>
         [Test]
         public void UseTls_round_trips_via_yaml()
         {
@@ -101,11 +101,11 @@ namespace MTConnect.AgentModule.MqttRelay.Tests
             var roundTripped = deserializer.Deserialize<MqttRelayModuleConfiguration>(yaml);
 
             Assert.That(yaml, Does.Contain("useTls:"),
-                "The binder uses camelCase; the field name must serialise as 'useTls'.");
+                "The binder uses camelCase; the field name must serialize as 'useTls'.");
             Assert.That(roundTripped.UseTls, Is.True);
         }
 
-        /// <summary>Pins the Tls-subtree YAML round-trip: the VerifyClientCertificate + OmitCAValidation flags reach the deserialised object, so the Tls.* flag surface the options builder consumes cannot be silently dropped by the binder.</summary>
+        /// <summary>Pins the Tls-subtree YAML round-trip: the VerifyClientCertificate + OmitCAValidation flags reach the deserialized object, so the Tls.* flag surface the options builder consumes cannot be silently dropped by the binder.</summary>
         [Test]
         public void Tls_flags_round_trip_via_yaml()
         {
