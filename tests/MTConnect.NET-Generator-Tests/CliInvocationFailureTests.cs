@@ -272,7 +272,7 @@ namespace MTConnect.NET_Generator_Tests
             var scratch = InitScratchWithLibraries("malformed-xmi");
             var badXmi = Path.Combine(scratch, "malformed.xml");
             // A well-formed XML that is not a SysML XMI. Two possible
-            // surface behaviours:
+            // surface behaviors:
             //   (a) MTConnectModel.Parse returns null → Program's full-tree
             //       branch prints "error: Failed to parse XMI" and returns 1.
             //   (b) MTConnectModel.Parse throws (missing UML root element,
@@ -517,7 +517,7 @@ namespace MTConnect.NET_Generator_Tests
                 ?? throw new InvalidOperationException("Failed to start dotnet run for the generator.");
 
             // Drain stdout and stderr concurrently — see ByteIdenticalRegenTests
-            // for the deadlock defence this pattern encodes.
+            // for the deadlock defense this pattern encodes.
             var stdoutTask = proc.StandardOutput.ReadToEndAsync();
             var stderrTask = proc.StandardError.ReadToEndAsync();
             System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();

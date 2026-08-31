@@ -348,7 +348,7 @@ public static class CliInventory
             // label, or a `break;` terminator, so a boolean flag whose case
             // body sits above a value-taking case (like `--full-tree` above
             // `case "--output": … RequireValue(…)`) does not falsely inherit
-            // the neighbour's value shape.
+            // the neighbor's value shape.
             bool takesValue = Regex.IsMatch(text,
                 $@"case\s+""{Regex.Escape(flagName)}""\s*:(?:(?!\s*case\s+""|\s*default\s*:|\bbreak\s*;)[\s\S])*?RequireValue");
             flags.Add(new CliFlag(

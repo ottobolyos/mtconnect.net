@@ -23,7 +23,7 @@ namespace MTConnect.NET_Generator_Tests
     ///     XMI and asserts the two emitted trees are byte-identical. This
     ///     locks in the determinism guarantee the template consolidations
     ///     in Phase 3 rely on: any consolidation that alters emission
-    ///     behaviour flips this test RED regardless of whether the
+    ///     behavior flips this test RED regardless of whether the
     ///     committed <c>libraries/**/*.g.cs</c> tree is currently in sync
     ///     with the generator.</item>
     ///   <item><see cref="Current_XMI_regen_matches_committed_g_cs_tree"/> —
@@ -64,7 +64,7 @@ namespace MTConnect.NET_Generator_Tests
             var repoRoot = FindRepoRoot();
             var xmiPath = Path.Combine(repoRoot, XmiRelativePath);
             Assert.That(File.Exists(xmiPath), Is.True,
-                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialized?");
 
             var scratchA = Path.Combine(repoRoot, GenScratchDirPrimary);
             var scratchB = Path.Combine(repoRoot, GenScratchDirSecondary);
@@ -91,7 +91,7 @@ namespace MTConnect.NET_Generator_Tests
             var repoRoot = FindRepoRoot();
             var xmiPath = Path.Combine(repoRoot, XmiRelativePath);
             Assert.That(File.Exists(xmiPath), Is.True,
-                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialized?");
 
             var scratchRoot = Path.Combine(repoRoot, GenScratchDirPrimary);
             InitScratch(scratchRoot);
@@ -103,7 +103,7 @@ namespace MTConnect.NET_Generator_Tests
             var diff = CompareTrees(committed, emitted, leftLabel: "committed", rightLabel: "regenerated");
             Assert.That(diff.Length, Is.Zero,
                 "Regeneration is not byte-identical to the committed .g.cs tree. Either " +
-                "the templates changed emission behaviour, the parser drifted, or the " +
+                "the templates changed emission behavior, the parser drifted, or the " +
                 "committed generated files were hand-edited.\n\n" + diff);
         }
 

@@ -42,7 +42,7 @@ namespace MTConnect.NET_Common_Tests.DryGenerator
     // extra-files.user/plans/dry-generator-phase0/renames.tsv artefact is a
     // human-facing audit trail; the assertion source of truth lives in this
     // fixture so the test is portable across clones.
-    /// <summary>Pins the behaviour expressed by the test name: assertion parity tests.</summary>
+    /// <summary>Pins the behavior expressed by the test name: assertion parity tests.</summary>
     [TestFixture]
     public class AssertionParityTests
     {
@@ -71,7 +71,7 @@ namespace MTConnect.NET_Common_Tests.DryGenerator
             ("V2_7DataItemTypeTests.cs", "V2_7_DataItem_constructs_with_correct_metadata", "DataItem_constructs_with_correct_metadata"),
 
             // MTConnectVersionsTests.cs (5 methods — kept plain [Test] since
-            // these test constant-value invariants, not per-version behaviour)
+            // these test constant-value invariants, not per-version behavior)
             ("MTConnectVersionsTests.cs", "Version26_constant_equals_2_6", "Version26_constant_equals_2_6"),
             ("MTConnectVersionsTests.cs", "Version27_constant_equals_2_7", "Version27_constant_equals_2_7"),
             ("MTConnectVersionsTests.cs", "Max_equals_Version27", "Max_equals_Version27"),

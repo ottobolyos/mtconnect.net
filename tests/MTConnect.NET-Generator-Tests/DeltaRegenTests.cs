@@ -68,7 +68,7 @@ namespace MTConnect.NET_Generator_Tests
             var repoRoot = FindRepoRoot();
             var xmiPath = Path.Combine(repoRoot, XmiRelativePath);
             Assert.That(File.Exists(xmiPath), Is.True,
-                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialized?");
 
             var scratchRoot = Path.Combine(repoRoot, GenScratchDir, "same");
             InitScratch(scratchRoot);
@@ -96,7 +96,7 @@ namespace MTConnect.NET_Generator_Tests
                 "Actual files: " + string.Join(", ", compatFiles));
             foreach (var compatFile in compatFiles)
                 Assert.That(compatFile, Does.EndWith("/Compat/Baseline.g.cs"),
-                    "Compat file name should honour --compat-version-label.");
+                    "Compat file name should honor --compat-version-label.");
         }
 
         [Test]
@@ -105,7 +105,7 @@ namespace MTConnect.NET_Generator_Tests
             var repoRoot = FindRepoRoot();
             var xmiPath = Path.Combine(repoRoot, XmiRelativePath);
             Assert.That(File.Exists(xmiPath), Is.True,
-                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialized?");
 
             var scratchRoot = Path.Combine(repoRoot, GenScratchDir, "mutated");
             InitScratch(scratchRoot);
@@ -231,7 +231,7 @@ namespace MTConnect.NET_Generator_Tests
             // Drain stdout AND stderr concurrently — blocking on one pipe while
             // the child writes >4 KB to the other deadlocks (Linux pipe buffer
             // fills, child blocks on write, parent blocks on read of the empty
-            // pipe). See ByteIdenticalRegenTests for the same defence.
+            // pipe). See ByteIdenticalRegenTests for the same defense.
             var stdoutTask = proc.StandardOutput.ReadToEndAsync();
             var stderrTask = proc.StandardError.ReadToEndAsync();
             System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();

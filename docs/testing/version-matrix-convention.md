@@ -18,7 +18,7 @@ Version becomes a **parameter**, not a **container**. A single fixture file hous
 3. Add a method with the matrix source and the version gate:
 
    ```csharp
-   /// <summary>Pins the behaviour expressed by the test name: my new spec type constructs with correct metadata.</summary>
+   /// <summary>Pins the behavior expressed by the test name: my new spec type constructs with correct metadata.</summary>
    /// <param name="v">The MTConnect Standard version under test.</param>
    [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
    public void MyNewSpecType_constructs_with_correct_metadata(Version v)
@@ -38,7 +38,7 @@ Version becomes a **parameter**, not a **container**. A single fixture file hous
 
 ## When to keep a plain `[Test]` (no matrix)
 
-Assertions that pin **constant-value invariants** — for example `MTConnectVersions.Version27 == new Version(2, 7)` — are not per-version behaviour. Keep them as plain `[Test]` (see `tests/MTConnect.NET-Common-Tests/MTConnectVersionsTests.cs`). The prohibition guard does not flag topic-file `[Test]` methods; only fixture-class name and folder shape matter.
+Assertions that pin **constant-value invariants** — for example `MTConnectVersions.Version27 == new Version(2, 7)` — are not per-version behavior. Keep them as plain `[Test]` (see `tests/MTConnect.NET-Common-Tests/MTConnectVersionsTests.cs`). The prohibition guard does not flag topic-file `[Test]` methods; only fixture-class name and folder shape matter.
 
 ## Historical anchors
 

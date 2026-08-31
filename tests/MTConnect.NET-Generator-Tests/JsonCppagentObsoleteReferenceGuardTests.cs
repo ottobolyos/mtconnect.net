@@ -69,7 +69,7 @@ namespace MTConnect.NET_Generator_Tests
             var repoRoot = FindRepoRoot();
             var xmiPath = Path.Combine(repoRoot, XmiRelativePath);
             Assert.That(File.Exists(xmiPath), Is.True,
-                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {xmiPath}. Is the build/sysml-model submodule initialized?");
 
             var scratchRoot = Path.Combine(repoRoot, GenScratchDir);
             InitScratch(scratchRoot);

@@ -13,9 +13,9 @@ namespace MTConnect.NET_Common_Tests
     // These assertions test the shape of the MTConnectVersions type itself
     // (constant values, distinctness, monotonicity, absence of forbidden
     // constants). They are structural invariants of the type, NOT
-    // per-version behavioural gates, so they run as plain [Test] rather
+    // per-version behavioral gates, so they run as plain [Test] rather
     // than under the [TestCaseSource(MTConnectVersionMatrix.All)] matrix
-    // that governs the behavioural fixtures elsewhere in this project.
+    // that governs the behavioral fixtures elsewhere in this project.
     // The plan's Design Decision D1 (2026-08-19) reserves the matrix for
     // version-sensitive assertions; constant-value assertions live outside
     // that scope.

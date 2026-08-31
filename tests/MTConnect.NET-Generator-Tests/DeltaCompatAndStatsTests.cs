@@ -341,7 +341,7 @@ namespace MTConnect.NET_Generator_Tests
                 ?? throw new InvalidOperationException("Failed to start dotnet run for the generator.");
 
             // Drain stdout and stderr concurrently — see ByteIdenticalRegenTests
-            // for the deadlock defence this pattern encodes.
+            // for the deadlock defense this pattern encodes.
             var stdoutTask = proc.StandardOutput.ReadToEndAsync();
             var stderrTask = proc.StandardError.ReadToEndAsync();
             System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();

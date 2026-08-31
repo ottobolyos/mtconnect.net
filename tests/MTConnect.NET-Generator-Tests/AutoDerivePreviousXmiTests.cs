@@ -83,7 +83,7 @@ namespace MTConnect
             var repoRoot = FindRepoRoot();
             var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
             Assert.That(File.Exists(realXmi), Is.True,
-                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialized?");
 
             var scratch = InitScratchRepoLayout("cache-primary");
             WriteSyntheticVersionsCs(scratch);
@@ -120,7 +120,7 @@ namespace MTConnect
                 .Where(p => p.Contains("/Compat/"))
                 .ToList();
             Assert.That(compatFiles.Count, Is.EqualTo(3),
-                "One auto-labelled Compat file per library (three libraries): "
+                "One auto-labeled Compat file per library (three libraries): "
                 + string.Join(", ", compatFiles));
         }
 
@@ -130,7 +130,7 @@ namespace MTConnect
             var repoRoot = FindRepoRoot();
             var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
             Assert.That(File.Exists(realXmi), Is.True,
-                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialized?");
 
             var scratch = InitScratchRepoLayout("submodule-fallback");
             WriteSyntheticVersionsCs(scratch);
@@ -268,7 +268,7 @@ namespace MTConnect
             // --previous-xmi, the delta would surface CoordinateSystem-shaped
             // changes (from the mutation) instead of zero-change output. The
             // explicit --previous-xmi points at the pristine XMI, matching
-            // --new-xmi bit-for-bit, so a correctly-prioritised resolver
+            // --new-xmi bit-for-bit, so a correctly-prioritized resolver
             // produces `changed=0` while a broken one produces `changed>0`.
             var cacheDir = Path.Combine(scratch, "build", ".cache", "sysml-prev");
             Directory.CreateDirectory(cacheDir);
@@ -482,7 +482,7 @@ namespace MTConnect
             var repoRoot = FindRepoRoot();
             var realXmi = Path.Combine(repoRoot, RealXmiRelativePath);
             Assert.That(File.Exists(realXmi), Is.True,
-                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialised?");
+                $"XMI snapshot missing at {realXmi}. Is the build/sysml-model submodule initialized?");
 
             var scratch = InitScratchRepoLayout("prev-eq-new-guard");
             WriteSyntheticVersionsCs(scratch);
@@ -742,7 +742,7 @@ namespace MTConnect
             RunGit(dir, "commit", "-q", "-m", "synthetic sysml-model snapshot for auto-derive test");
             // Explicit lightweight tag — no `-a`, no `-s`, no message — so the
             // synthetic tag lands regardless of tester-side GPG state. The
-            // per-repo `tag.gpgsign=false` above is defence-in-depth for the
+            // per-repo `tag.gpgsign=false` above is defense-in-depth for the
             // same concern.
             RunGit(dir, "tag", tagName);
         }
@@ -830,7 +830,7 @@ namespace MTConnect
                 ?? throw new InvalidOperationException("Failed to start dotnet run for the generator.");
 
             // Drain stdout and stderr concurrently — see ByteIdenticalRegenTests
-            // for the deadlock defence this pattern encodes.
+            // for the deadlock defense this pattern encodes.
             var stdoutTask = proc.StandardOutput.ReadToEndAsync();
             var stderrTask = proc.StandardError.ReadToEndAsync();
             System.Threading.Tasks.Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();

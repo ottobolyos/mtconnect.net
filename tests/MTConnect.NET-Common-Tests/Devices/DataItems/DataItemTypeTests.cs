@@ -36,13 +36,13 @@ namespace MTConnect.NET_Common_Tests.Devices.DataItems
     // (2026-08-19). Assume.That gates each assertion to versions where
     // the spec introduced the type; rows below the floor surface as
     // Inconclusive in the test explorer.
-    /// <summary>Pins the behaviour expressed by the test name: data item type tests.</summary>
+    /// <summary>Pins the behavior expressed by the test name: data item type tests.</summary>
     [TestFixture]
     public class DataItemTypeTests
     {
         // Source: XMI v2.6 UML class `AssetAddedDataItem`; XSD v2.6 enum
         // `EventEnum` value `ASSET_ADDED`.
-        /// <summary>Pins the behaviour expressed by the test name: asset added data item constructs with event metadata.</summary>
+        /// <summary>Pins the behavior expressed by the test name: asset added data item constructs with event metadata.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AssetAddedDataItem_constructs_with_event_metadata(Version v)
@@ -60,7 +60,7 @@ namespace MTConnect.NET_Common_Tests.Devices.DataItems
         }
 
         // Source: XMI v2.6 — `DataItem.id` formation rule via parent device.
-        /// <summary>Pins the behaviour expressed by the test name: asset added data item with device id produces qualified id.</summary>
+        /// <summary>Pins the behavior expressed by the test name: asset added data item with device id produces qualified id.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AssetAddedDataItem_with_deviceId_produces_qualified_id(Version v)
@@ -76,7 +76,7 @@ namespace MTConnect.NET_Common_Tests.Devices.DataItems
 
         // Source: XMI v2.6 UML class `AssociatedAssetIdDataItem`; XSD v2.6
         // EventEnum value `ASSOCIATED_ASSET_ID`.
-        /// <summary>Pins the behaviour expressed by the test name: associated asset id data item constructs with event metadata.</summary>
+        /// <summary>Pins the behavior expressed by the test name: associated asset id data item constructs with event metadata.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AssociatedAssetIdDataItem_constructs_with_event_metadata(Version v)
@@ -93,7 +93,7 @@ namespace MTConnect.NET_Common_Tests.Devices.DataItems
         }
 
         // Source: XMI v2.6 — generalization of `AssetAddedDataItem` is `DataItem`.
-        /// <summary>Pins the behaviour expressed by the test name: asset added data item inherits from data item.</summary>
+        /// <summary>Pins the behavior expressed by the test name: asset added data item inherits from data item.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AssetAddedDataItem_inherits_from_DataItem(Version v)
@@ -105,7 +105,7 @@ namespace MTConnect.NET_Common_Tests.Devices.DataItems
         }
 
         // Source: XMI v2.6 — generalization of `AssociatedAssetIdDataItem` is `DataItem`.
-        /// <summary>Pins the behaviour expressed by the test name: associated asset id data item inherits from data item.</summary>
+        /// <summary>Pins the behavior expressed by the test name: associated asset id data item inherits from data item.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AssociatedAssetIdDataItem_inherits_from_DataItem(Version v)
@@ -119,7 +119,7 @@ namespace MTConnect.NET_Common_Tests.Devices.DataItems
         // Source: XMI v2.6 description on `AssetChangedDataItem` (was "added or
         // changed" in v2.5; now "changed" only). Prose confirms in
         // Part_2.0_Streams_v2.6 section 11.5.
-        /// <summary>Pins the behaviour expressed by the test name: asset changed data item description narrowed.</summary>
+        /// <summary>Pins the behavior expressed by the test name: asset changed data item description narrowed.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AssetChangedDataItem_description_narrowed(Version v)
@@ -169,7 +169,7 @@ namespace MTConnect.NET_Common_Tests.Devices.DataItems
         }
 
         // Source: XMI v2.7 Observation Types package (each entry above).
-        /// <summary>Pins the behaviour expressed by the test name: data item constructs with correct metadata.</summary>
+        /// <summary>Pins the behavior expressed by the test name: data item constructs with correct metadata.</summary>
         /// <param name="dataItemType">The data item type.</param>
         /// <param name="expectedTypeId">The expected type id.</param>
         /// <param name="expectedCategory">The expected category.</param>

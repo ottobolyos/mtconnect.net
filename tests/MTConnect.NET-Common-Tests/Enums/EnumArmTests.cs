@@ -24,7 +24,7 @@ namespace MTConnect.NET_Common_Tests.Enums
     // MTConnectVersionMatrix.All per plan Design Decision D1
     // (2026-08-19); Assume.That gates each row to versions where the arm
     // shipped.
-    /// <summary>Pins the behaviour expressed by the test name: enum arm tests.</summary>
+    /// <summary>Pins the behavior expressed by the test name: enum arm tests.</summary>
     [TestFixture]
     public class EnumArmTests
     {
@@ -32,7 +32,7 @@ namespace MTConnect.NET_Common_Tests.Enums
         // XSD v2.6 lists QIF_MBD inside the MediaType simpleType
         // enumeration. Prose Part_3.0_Devices_v2.6 section 4.7.2.5
         // introduces "ISO 10303 QIF model-based design" as the rationale.
-        /// <summary>Pins the behaviour expressed by the test name: media type q i f m b d value present.</summary>
+        /// <summary>Pins the behavior expressed by the test name: media type q i f m b d value present.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void MediaType_QIF_MBD_value_present(Version v)

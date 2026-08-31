@@ -64,7 +64,7 @@ Every surviving mutant has three acceptable dispositions:
 
 1. **Killed by a new test.** Add a test that would fail if the mutation were shipped, land it in the same PR that introduced the surface. This is the default disposition — 99 % of surviving mutants deserve a matching test.
 2. **Explicit exclusion with rationale.** Add the mutant to `stryker-config.json`'s `mutate.excluded-mutations` list (or use a `// Stryker disable next-line <mutator>` pragma at the source site) with a comment explaining why the mutation is spec-equivalent / performance-equivalent / defensively-unreachable. Rare — needs code-level rationale.
-3. **Deferred to the coverage-quality campaign.** Until TrakHound/MTConnect.NET#242 raises the pinned break threshold in step, survivors that keep the score at or above the pinned break (5 %) do not block merge; catalogue them per subsystem in the #242 phase plan. This disposition is a scoped transitional accommodation, not a general-purpose escape hatch — every survivor still needs an eventual disposition 1 or 2.
+3. **Deferred to the coverage-quality campaign.** Until TrakHound/MTConnect.NET#242 raises the pinned break threshold in step, survivors that keep the score at or above the pinned break (5 %) do not block merge; catalog them per subsystem in the #242 phase plan. This disposition is a scoped transitional accommodation, not a general-purpose escape hatch — every survivor still needs an eventual disposition 1 or 2.
 
 Zero surviving mutants (or fully-justified exclusions) remains the long-term merge gate; the pinned 7.75 % baseline is the interim floor per #242.
 

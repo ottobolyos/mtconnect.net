@@ -29,13 +29,13 @@ namespace MTConnect.NET_Common_Tests.Devices.Components
     // spec introduced the type. Rows below the floor surface as
     // Inconclusive in the test explorer, which is the D1-ruled shape for
     // "gated out" versus "ran and passed".
-    /// <summary>Pins the behaviour expressed by the test name: component tests.</summary>
+    /// <summary>Pins the behavior expressed by the test name: component tests.</summary>
     [TestFixture]
     public class ComponentTests
     {
         // Source: XMI v2.6 UML `CuttingTorch` (Component Types); XSD v2.6
         // `<xs:element name="CuttingTorch">`.
-        /// <summary>Pins the behaviour expressed by the test name: cutting torch component constructs with correct type.</summary>
+        /// <summary>Pins the behavior expressed by the test name: cutting torch component constructs with correct type.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void CuttingTorchComponent_constructs_with_correct_type(Version v)
@@ -52,7 +52,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Components
 
         // Source: XMI v2.6 UML `Electrode` (Component Types); XSD v2.6
         // `<xs:element name="Electrode">`.
-        /// <summary>Pins the behaviour expressed by the test name: electrode component constructs with correct type.</summary>
+        /// <summary>Pins the behavior expressed by the test name: electrode component constructs with correct type.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void ElectrodeComponent_constructs_with_correct_type(Version v)
@@ -69,7 +69,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Components
 
         // Source: XMI v2.7 UML `PinTool` (Component Types); XSD v2.7
         // ComponentType enumeration value `PinTool`.
-        /// <summary>Pins the behaviour expressed by the test name: pin tool component constructs with correct type.</summary>
+        /// <summary>Pins the behavior expressed by the test name: pin tool component constructs with correct type.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void PinToolComponent_constructs_with_correct_type(Version v)
@@ -86,7 +86,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Components
 
         // Source: XMI v2.7 UML `ToolHolder` (Component Types); XSD v2.7
         // ComponentType enumeration value `ToolHolder`.
-        /// <summary>Pins the behaviour expressed by the test name: tool holder component constructs with correct type.</summary>
+        /// <summary>Pins the behavior expressed by the test name: tool holder component constructs with correct type.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void ToolHolderComponent_constructs_with_correct_type(Version v)

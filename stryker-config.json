@@ -10,7 +10,7 @@
 // yellow (`low <= score < high`) rather than green, keeping visible
 // pressure on the follow-up campaign until the floor rises above `high`.
 // See TrakHound/MTConnect.NET#242 for the phase-by-phase plan
-// (categorise survivors -> kill by subsystem -> raise thresholds in step
+// (categorize survivors -> kill by subsystem -> raise thresholds in step
 // to 20 -> 40 -> 60 -> 80%+ -> expand Stryker to sibling assemblies).
 //
 // Stryker.NET tool version is pinned in `.config/dotnet-tools.json`

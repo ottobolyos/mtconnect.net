@@ -275,7 +275,7 @@ if (fullTree || resolvedPreviousXmi is null)
 {
     // Full-tree mode (either explicit --full-tree or a caller that has
     // somehow reached here without a resolved previous XMI). Preserves the
-    // pre-Phase-4 behaviour bit-for-bit.
+    // pre-Phase-4 behavior bit-for-bit.
     var mtconnectModel = MTConnectModel.Parse(newXmiPath);
     if (mtconnectModel == null)
     {
@@ -755,7 +755,7 @@ static DeltaStats EmitDelta(string prevScratch, string newScratch, string output
 
 // Enumerates every .g.cs file under `root` and returns a dictionary keyed by
 // the forward-slash-normalised path relative to `root`, with the raw file
-// bytes as value. Ordinal-key comparer keeps cross-platform behaviour
+// bytes as value. Ordinal-key comparer keeps cross-platform behavior
 // consistent (Linux CI vs. Windows local).
 static Dictionary<string, byte[]> EnumerateGeneratedFiles(string root)
 {

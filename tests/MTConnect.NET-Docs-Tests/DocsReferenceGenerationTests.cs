@@ -128,9 +128,9 @@ public class DocsReferenceGenerationTests
     /// Direct pin for the cycle-4 DocsGen bounded-scan fix
     /// (<c>CliInventory.CollectDotNetTool</c>): the <c>takesValue</c>
     /// regex must be bounded to the CURRENT <c>case</c> block, otherwise
-    /// a boolean switch flag sitting above a value-taking neighbour
+    /// a boolean switch flag sitting above a value-taking neighbor
     /// (e.g. <c>--full-tree</c> above <c>case "--output": … RequireValue</c>)
-    /// would falsely inherit the neighbour's <c>&lt;value&gt;</c> shape.
+    /// would falsely inherit the neighbor's <c>&lt;value&gt;</c> shape.
     ///
     /// <para>
     /// The golden-file <c>Cli_Page_Is_In_Sync_With_Source</c> test would
@@ -153,7 +153,7 @@ public class DocsReferenceGenerationTests
         Assert.That(fullTree!.ArgShape, Is.Null,
             "--full-tree is a boolean switch (case body: `fullTree = true; break;`). "
             + "The bounded RequireValue scan must NOT leak in the value shape from the "
-            + "neighbouring --output / --json-dump cases. An ArgShape of `<value>` here "
+            + "neighboring --output / --json-dump cases. An ArgShape of `<value>` here "
             + "means the bounded-scan regex regressed to an unbounded lookahead.");
     }
 

@@ -25,7 +25,7 @@ namespace MTConnect.NET_Common_Tests.DryGenerator
     // Version25) are NOT migrated — they document a deliberate,
     // permanent pin. Add such classes to HistoricalAnchors with a
     // rationale comment before the entry.
-    /// <summary>Pins the behaviour expressed by the test name: per version folder prohibition tests.</summary>
+    /// <summary>Pins the behavior expressed by the test name: per version folder prohibition tests.</summary>
     [TestFixture]
     public class PerVersionFolderProhibitionTests
     {

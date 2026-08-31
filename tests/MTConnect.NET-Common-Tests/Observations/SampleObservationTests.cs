@@ -32,7 +32,7 @@ namespace MTConnect.NET_Common_Tests.Observations
     // MTConnectVersionMatrix.All per plan Design Decision D1
     // (2026-08-19). Assume.That gates each row to versions where the
     // sample type shipped.
-    /// <summary>Pins the behaviour expressed by the test name: sample observation tests.</summary>
+    /// <summary>Pins the behavior expressed by the test name: sample observation tests.</summary>
     [TestFixture]
     public class SampleObservationTests
     {
@@ -42,7 +42,7 @@ namespace MTConnect.NET_Common_Tests.Observations
         // a SampleValueObservation, and reading back the value. If the
         // library starts dropping the link between the DataItem's TypeId
         // and the observation's reported type, this test catches it.
-        /// <summary>Pins the behaviour expressed by the test name: water hardness sample observation round trip.</summary>
+        /// <summary>Pins the behavior expressed by the test name: water hardness sample observation round trip.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void WaterHardness_sample_observation_round_trip(Version v)

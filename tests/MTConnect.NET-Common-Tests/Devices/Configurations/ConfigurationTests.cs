@@ -36,14 +36,14 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
     // (2026-08-19). Assume.That gates every assertion to v2.7 (the version
     // that introduced the Configuration family); rows below the floor
     // surface as Inconclusive.
-    /// <summary>Pins the behaviour expressed by the test name: configuration tests.</summary>
+    /// <summary>Pins the behavior expressed by the test name: configuration tests.</summary>
     [TestFixture]
     public class ConfigurationTests
     {
         // The DataSet base (grafted from Observation.Representations via the
         // universal resolver) compiles, instantiates, and surfaces its
         // const description.
-        /// <summary>Pins the behaviour expressed by the test name: data set base constructs and implements i data set.</summary>
+        /// <summary>Pins the behavior expressed by the test name: data set base constructs and implements i data set.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void DataSet_base_constructs_and_implements_IDataSet(Version v)
@@ -60,8 +60,8 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
         // ctor, populates X/Y/Z (or A/B/C) fields, implements IDataSet
         // (interface, not the concrete DataSet base — *DataSet types
         // polymorphically extend their Abstract<Leaf> base, gaining IDataSet
-        // as a marker interface so XML/JSON serialisers can narrow on it).
-        /// <summary>Pins the behaviour expressed by the test name: axis data set has xyz fields and implements i data set.</summary>
+        // as a marker interface so XML/JSON serializers can narrow on it).
+        /// <summary>Pins the behavior expressed by the test name: axis data set has xyz fields and implements i data set.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AxisDataSet_has_xyz_fields_and_implements_IDataSet(Version v)
@@ -77,7 +77,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(a.Z, Is.EqualTo(3.0));
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: origin data set has xyz fields and implements i data set.</summary>
+        /// <summary>Pins the behavior expressed by the test name: origin data set has xyz fields and implements i data set.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void OriginDataSet_has_xyz_fields_and_implements_IDataSet(Version v)
@@ -90,7 +90,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(o, Is.InstanceOf<IOriginDataSet>());
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: rotation data set has abc fields and implements i data set.</summary>
+        /// <summary>Pins the behavior expressed by the test name: rotation data set has abc fields and implements i data set.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void RotationDataSet_has_abc_fields_and_implements_IDataSet(Version v)
@@ -104,7 +104,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(r, Is.InstanceOf<IRotationDataSet>());
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: scale data set implements i data set.</summary>
+        /// <summary>Pins the behavior expressed by the test name: scale data set implements i data set.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void ScaleDataSet_implements_IDataSet(Version v)
@@ -117,7 +117,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(s, Is.InstanceOf<IScaleDataSet>());
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: translation data set implements i data set.</summary>
+        /// <summary>Pins the behavior expressed by the test name: translation data set implements i data set.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void TranslationDataSet_implements_IDataSet(Version v)
@@ -132,7 +132,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
 
         // Concrete (non-DataSet) representations of the same primitives,
         // also landed in v2.7 alongside their DataSet siblings.
-        /// <summary>Pins the behaviour expressed by the test name: axis inherits abstract axis and constructs.</summary>
+        /// <summary>Pins the behavior expressed by the test name: axis inherits abstract axis and constructs.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void Axis_inherits_AbstractAxis_and_constructs(Version v)
@@ -146,7 +146,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(a.Value, Is.EqualTo("X"));
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: origin inherits abstract origin.</summary>
+        /// <summary>Pins the behavior expressed by the test name: origin inherits abstract origin.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void Origin_inherits_AbstractOrigin(Version v)
@@ -159,7 +159,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(o, Is.InstanceOf<IOrigin>());
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: rotation inherits abstract rotation.</summary>
+        /// <summary>Pins the behavior expressed by the test name: rotation inherits abstract rotation.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void Rotation_inherits_AbstractRotation(Version v)
@@ -170,7 +170,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(new Rotation(), Is.InstanceOf<AbstractRotation>());
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: scale inherits abstract scale.</summary>
+        /// <summary>Pins the behavior expressed by the test name: scale inherits abstract scale.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void Scale_inherits_AbstractScale(Version v)
@@ -181,7 +181,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(new Scale(), Is.InstanceOf<AbstractScale>());
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: translation inherits abstract translation.</summary>
+        /// <summary>Pins the behavior expressed by the test name: translation inherits abstract translation.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void Translation_inherits_AbstractTranslation(Version v)
@@ -194,7 +194,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
 
         // The Abstract* bases are abstract — verify so a future regen that
         // accidentally drops the abstract modifier trips here.
-        /// <summary>Pins the behaviour expressed by the test name: abstract axis is abstract.</summary>
+        /// <summary>Pins the behavior expressed by the test name: abstract axis is abstract.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AbstractAxis_is_abstract(Version v)
@@ -205,7 +205,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(typeof(AbstractAxis).IsAbstract, Is.True);
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: abstract origin is abstract.</summary>
+        /// <summary>Pins the behavior expressed by the test name: abstract origin is abstract.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AbstractOrigin_is_abstract(Version v)
@@ -216,7 +216,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(typeof(AbstractOrigin).IsAbstract, Is.True);
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: abstract rotation is abstract.</summary>
+        /// <summary>Pins the behavior expressed by the test name: abstract rotation is abstract.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AbstractRotation_is_abstract(Version v)
@@ -227,7 +227,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(typeof(AbstractRotation).IsAbstract, Is.True);
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: abstract scale is abstract.</summary>
+        /// <summary>Pins the behavior expressed by the test name: abstract scale is abstract.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AbstractScale_is_abstract(Version v)
@@ -238,7 +238,7 @@ namespace MTConnect.NET_Common_Tests.Devices.Configurations
             Assert.That(typeof(AbstractScale).IsAbstract, Is.True);
         }
 
-        /// <summary>Pins the behaviour expressed by the test name: abstract translation is abstract.</summary>
+        /// <summary>Pins the behavior expressed by the test name: abstract translation is abstract.</summary>
         /// <param name="v">The MTConnect Standard version under test.</param>
         [TestCaseSource(typeof(MTConnectVersionMatrix), nameof(MTConnectVersionMatrix.All))]
         public void AbstractTranslation_is_abstract(Version v)
