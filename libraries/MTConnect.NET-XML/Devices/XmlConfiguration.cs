@@ -261,7 +261,7 @@ namespace MTConnect.Devices.Xml
                 // Write Vendor Extensions — each XElement is a fully-formed,
                 // vendor-namespaced element that a vendor XSD declares as a
                 // substitution of the standard AbstractConfiguration abstract
-                // element. Serialise verbatim via WriteRaw so namespace
+                // element. Serialize verbatim via WriteRaw so namespace
                 // declarations and mixed content are preserved as authored.
                 if (configuration.VendorExtensions != null)
                 {
