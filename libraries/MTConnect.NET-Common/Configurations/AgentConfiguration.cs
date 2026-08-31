@@ -152,19 +152,19 @@ namespace MTConnect.Configurations
         /// <remarks>
         /// <para>
         /// When a configuration file omits this key the loader mirrors <see cref="InputValidationLevel"/>
-        /// onto Device validation, preserving pre-v7 behaviour for consumers that only knew the single
+        /// onto Device validation, preserving pre-v7 behavior for consumers that only knew the single
         /// <see cref="InputValidationLevel"/> knob. Setting this property — either programmatically or via a
         /// key present in the source document — latches the value as explicit (the nullable backing field
         /// becomes non-null) and disables the mirror on the next <see cref="Normalize"/>. An assignment
         /// whose ordinal is not a defined enum arm raises <see cref="ArgumentOutOfRangeException"/>.
         /// </para>
         /// <para>
-        /// <b>Save-latches-mirror behaviour.</b> The getter self-mirrors from
+        /// <b>Save-latches-mirror behavior.</b> The getter self-mirrors from
         /// <see cref="InputValidationLevel"/> when the backing field is still null (i.e. this key was
-        /// never explicitly set), and JSON/YAML serialisers observe the getter's return value — not the
+        /// never explicitly set), and JSON/YAML serializers observe the getter's return value — not the
         /// nullable backing field. That means <see cref="SaveJson"/> / <see cref="SaveYaml"/> on a
         /// configuration whose DVL was never explicitly set writes the mirrored ordinal into the
-        /// document. On the next <see cref="Read{T}"/> the deserialiser hits an explicit key and
+        /// document. On the next <see cref="Read{T}"/> the deserializer hits an explicit key and
         /// latches it, converting the previously implicit mirror into an EXPLICIT stored value. Runtime
         /// <see cref="InputValidationLevel"/> changes after that reload therefore do NOT re-mirror onto
         /// DVL — the operator must clear DVL back to implicit (currently only possible via a fresh
@@ -274,7 +274,7 @@ namespace MTConnect.Configurations
         /// Invoked by every <see cref="Read{T}(string)"/> / <see cref="ReadJson{T}(string)"/> /
         /// <see cref="ReadYaml{T}(string)"/> path so consumers who only set
         /// <see cref="InputValidationLevel"/> in their configuration observe the same Device-validation
-        /// behaviour they got before the split. Callers loading a configuration programmatically may invoke
+        /// behavior they got before the split. Callers loading a configuration programmatically may invoke
         /// <see cref="Normalize"/> once construction is complete to pick up the same default.
         /// </remarks>
         public void Normalize()
@@ -297,7 +297,7 @@ namespace MTConnect.Configurations
         /// Maps an <see cref="InputValidationLevel"/> onto its
         /// <see cref="DeviceValidationLevel"/> mirror. Both enums currently share
         /// ordinals 0-3, so the naive <c>(DeviceValidationLevel)(int)value</c>
-        /// bit-cast is behaviourally identical today — but the cast is a static
+        /// bit-cast is behaviorally identical today — but the cast is a static
         /// alias with no compile-time signal if either enum ever grows an
         /// asymmetric arm (or reorders one). An explicit switch expression fires
         /// CS8509 when a future <see cref="InputValidationLevel"/> arm lacks a
@@ -331,7 +331,7 @@ namespace MTConnect.Configurations
 
         /// <summary>
         /// Walks the <see cref="Exception.InnerException"/> chain looking for an
-        /// <see cref="ArgumentOutOfRangeException"/>. Deserialisers (YamlDotNet
+        /// <see cref="ArgumentOutOfRangeException"/>. Deserializers (YamlDotNet
         /// notably) wrap setter throws in one or more layers of their own
         /// container exception, so the direct <c>catch (ArgumentOutOfRangeException)</c>
         /// filter is insufficient. Depth-bounded so a pathological deeply-nested
@@ -365,15 +365,15 @@ namespace MTConnect.Configurations
         /// helper collapses ~96 lines of duplication and simultaneously closes the
         /// cycle-1-vs-cycle-2 asymmetry (dime M2-C2 subsumes M1-C2): the
         /// <see cref="ReadJson{T}(string)"/> path was missing the middle
-        /// <c>when Unwrap...</c> catch, so a wrapped enum error deserialised by
+        /// <c>when Unwrap...</c> catch, so a wrapped enum error deserialized by
         /// <c>System.Text.Json</c> was falling through to the generic
         /// trace-and-return-null branch instead of raising
         /// <see cref="ArgumentException"/> like the other three loaders. Sharing
         /// the same body by construction fixes the asymmetry forever.
         /// </summary>
-        /// <typeparam name="T">The concrete return type of the deserialiser call — constrained to <see cref="AgentConfiguration"/> so the helper can set <see cref="AgentConfiguration.Path"/> and call <see cref="AgentConfiguration.Normalize"/> on the loaded instance.</typeparam>
+        /// <typeparam name="T">The concrete return type of the deserializer call — constrained to <see cref="AgentConfiguration"/> so the helper can set <see cref="AgentConfiguration.Path"/> and call <see cref="AgentConfiguration.Normalize"/> on the loaded instance.</typeparam>
         /// <param name="configurationPath">The resolved configuration path — used both in the surfaced <see cref="ArgumentException"/> message, in the generic-fall-through <see cref="Trace.TraceError(string)"/> line, and stamped onto the loaded configuration's <see cref="AgentConfiguration.Path"/> property.</param>
-        /// <param name="deserialize">A closure that runs the deserialiser and returns the loaded configuration (or null when the source text was empty). The helper takes care of stamping <see cref="AgentConfiguration.Path"/> and invoking <see cref="AgentConfiguration.Normalize"/> on a non-null return, so the closure only needs to build its deserialiser options and return the deserialised value.</param>
+        /// <param name="deserialize">A closure that runs the deserializer and returns the loaded configuration (or null when the source text was empty). The helper takes care of stamping <see cref="AgentConfiguration.Path"/> and invoking <see cref="AgentConfiguration.Normalize"/> on a non-null return, so the closure only needs to build its deserializer options and return the deserialized value.</param>
         private static T LoadWithTriage<T>(string configurationPath, Func<T> deserialize) where T : AgentConfiguration
         {
             try
@@ -397,7 +397,7 @@ namespace MTConnect.Configurations
             }
             catch (Exception ex) when (UnwrapArgumentOutOfRange(ex) is ArgumentOutOfRangeException aoore)
             {
-                // Deserialisers (YamlDotNet notably, and System.Text.Json when it
+                // Deserializers (YamlDotNet notably, and System.Text.Json when it
                 // routes through a JsonConverter) wrap setter throws inside one or
                 // more layers of their own container exception; walk the
                 // InnerException chain so a bad-enum config surfaces the same

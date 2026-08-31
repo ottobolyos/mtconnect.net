@@ -34,7 +34,7 @@ namespace MTConnect.Tests.Common.Agents
     /// base class rather than a concrete subclass — this is what the
     /// NormalizeDevice validation loop identifies via
     /// <c>o.GetType() == typeof(Component)</c> as "invalid type not found".
-    /// Setting <c>Type</c> to a string the registry does not recognise causes
+    /// Setting <c>Type</c> to a string the registry does not recognize causes
     /// the corresponding Create factory to fall back to the raw base class.
     /// </summary>
     [TestFixture]
@@ -45,7 +45,7 @@ namespace MTConnect.Tests.Common.Agents
         private const string DeviceName = "DeviceValidationLevel";
         private const string DeviceId = "device-validation-level-device-id";
 
-        // Unrecognised Type strings force each Create factory (Component /
+        // Unrecognized Type strings force each Create factory (Component /
         // Composition / DataItem) into its base-class fallback, which is
         // exactly the "generic" entity NormalizeDevice validates against.
         private const string UnknownComponentType = "ThisComponentTypeIsNotRegistered";
@@ -92,7 +92,7 @@ namespace MTConnect.Tests.Common.Agents
 
             Assert.That(config.DeviceValidationLevel, Is.EqualTo(DeviceValidationLevel.Warning),
                 "Warning is the spec-safe default: the invalid entity survives but " +
-                "a subscriber is notified. Any change to this default is a behaviour break.");
+                "a subscriber is notified. Any change to this default is a behavior break.");
         }
 
         // ---------------------------------------------------------------
@@ -338,7 +338,7 @@ namespace MTConnect.Tests.Common.Agents
 
         // ---------------------------------------------------------------
         // Cross-cutting: setting DeviceValidationLevel does NOT change
-        // InputValidationLevel behaviour and vice versa. The pre-PR
+        // InputValidationLevel behavior and vice versa. The pre-PR
         // implementation collapsed the two on InputValidationLevel; this
         // assertion pins the split.
         // ---------------------------------------------------------------

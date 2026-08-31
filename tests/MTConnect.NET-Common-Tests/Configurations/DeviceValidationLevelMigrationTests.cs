@@ -411,7 +411,7 @@ namespace MTConnect.Tests.Common.Configurations
         /// path. A regression that dropped the <c>configuration.Normalize()</c> call from
         /// <c>ReadYaml</c> (AgentConfiguration.cs:439) would silently downgrade YAML-loading
         /// consumers to the ctor-default DeviceValidationLevel on every arm change of
-        /// InputValidationLevel — a diagnostic-silent behaviour break.
+        /// InputValidationLevel — a diagnostic-silent behavior break.
         /// </summary>
         [Test]
         public void ReadYaml_InputValidationLevel_Only_Mirrors_Onto_DeviceValidationLevel()
@@ -486,7 +486,7 @@ namespace MTConnect.Tests.Common.Configurations
 
         /// <summary>
         /// Sibling of the JSON test — the YAML load path must also surface the
-        /// enum-out-of-range setter exception (unwrapping any deserialiser-level
+        /// enum-out-of-range setter exception (unwrapping any deserializer-level
         /// wrapper — YamlDotNet nests AOORE inside its own container) with the
         /// configuration path attached.
         /// </summary>
@@ -539,7 +539,7 @@ namespace MTConnect.Tests.Common.Configurations
         //
         // The H2 fix introduces a private static helper `UnwrapArgumentOutOfRange(Exception)`
         // on <see cref="AgentConfiguration"/> that walks the <see cref="Exception.InnerException"/>
-        // chain looking for an <see cref="ArgumentOutOfRangeException"/> — deserialisers
+        // chain looking for an <see cref="ArgumentOutOfRangeException"/> — deserializers
         // (YamlDotNet notably) nest the setter throw inside their own container. The walk
         // is depth-bounded at MaxUnwrapDepth = 16 to defend against a pathological deeply-
         // nested chain looping forever. The public YAML load path only produces a chain
@@ -814,7 +814,7 @@ namespace MTConnect.Tests.Common.Configurations
                 Assert.That(ex!.Message, Does.Contain(path),
                     "the Type-taking YAML overload must attach the configuration path — parity with the generic overload.");
                 Assert.That(ex.Message, Does.Contain("InputValidationLevel"),
-                    "the Type-taking YAML overload must unwrap the deserialiser wrapper and preserve the setter's actionable message.");
+                    "the Type-taking YAML overload must unwrap the deserializer wrapper and preserve the setter's actionable message.");
             }
             finally
             {
@@ -1010,7 +1010,7 @@ namespace MTConnect.Tests.Common.Configurations
         /// hoisted assignment would leave <c>Path</c> null after every load,
         /// silently breaking downstream file-relative resolutions (the Path
         /// property's docstring names it "the default target when the
-        /// configuration is saved") — a diagnostic-silent behaviour break.
+        /// configuration is saved") — a diagnostic-silent behavior break.
         /// </summary>
         [Test]
         public void ReadJson_Stamps_Configuration_Path_On_Loaded_Instance()

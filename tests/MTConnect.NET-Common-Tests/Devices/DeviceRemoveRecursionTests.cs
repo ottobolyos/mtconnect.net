@@ -744,7 +744,7 @@ namespace MTConnect.NET_Common_Tests.Devices
         /// Pins the L3-C2 trace-warning shape for
         /// <see cref="Device.RemoveComposition(string)"/>. A regression that
         /// drops the <c>Trace.TraceWarning</c> line inside the depth-guard
-        /// early-return still passes the depth-ceiling behavioural test above
+        /// early-return still passes the depth-ceiling behavioral test above
         /// because the deep-target-survives assertion only observes the
         /// null-effect, not the diagnostic. This fixture captures Trace output
         /// and asserts the warning fires with the exact shape operators grep on.
