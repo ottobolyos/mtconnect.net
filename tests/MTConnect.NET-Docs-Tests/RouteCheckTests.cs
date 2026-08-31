@@ -157,7 +157,7 @@ public class RouteCheckTests
             // fixture is the sole authority on dist/, so it always
             // rebuilds — a warm-cache local run must still walk a tree
             // generated from the CURRENT source markdown, current
-            // config.ts, current sidebar, and so on. Honouring a
+            // config.ts, current sidebar, and so on. Honoring a
             // pre-existing dist/index.html sentinel was the earlier
             // policy and it silently walked a stale tree whenever a
             // developer re-ran `dotnet test` after editing source: the
